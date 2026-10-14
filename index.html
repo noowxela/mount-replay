@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Mount Kinabalu · Hike replay</title>
+  <meta name="description" content="A 3D replay of the two-day Mount Kinabalu climb from Timpohon Gate to Low's Peak (4,095 m), with your own photos placed on the trail. Copernicus GLO-30 terrain, OpenStreetMap trail." />
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="mark">▲</span> <b data-i="title"></b> <span class="sub" data-i="subtitle"></span></div>
+    <div class="langs" role="group" aria-label="Language"><button data-lang="en">EN</button><button data-lang="zh">中文</button><button data-lang="ms">BM</button></div>
+  </header>
+  <main class="layout">
+    <section class="stage" aria-label="3D terrain">
+      <div id="gl"></div>
+      <div id="labels" aria-hidden="true"></div>
+      <div class="overlay tl">
+        <div class="tagline" data-i="tagline"></div>
+        <div class="views" role="group"><button data-view="auto"></button><button data-view="follow"></button><button data-view="oblique"></button><button data-view="top"></button><button data-view="reset"></button></div>
+        <div class="tone" role="group"><button id="btn-colour"></button><button id="btn-mono"></button></div>
+      </div>
+      <div class="overlay bl hint" data-i="hint"></div>
+      <div id="night" class="night hidden" role="status"><div class="night-t" data-i="night"></div><div class="night-x" data-i="nightText"></div><button id="night-skip" data-i="skip"></button></div>
+      <div id="loading" class="loading" data-i="loading"></div>
+    </section>
+    <aside class="side">
+      <section class="panel live"><h2><span class="num">01</span> <span data-i="live"></span> <span class="badge" data-i="typical"></span></h2>
+        <div class="kv"><div><span data-i="clock"></span><b id="v-clock">–</b><i id="v-day"></i></div><div><span data-i="elevation"></span><b id="v-ele">–</b></div><div><span data-i="distance"></span><b id="v-dist">–</b></div><div><span data-i="elapsed"></span><b id="v-elapsed">–</b></div></div>
+        <p class="note" data-i="typicalNote"></p></section>
+      <section class="panel cps"><h2><span class="num">03</span> <span data-i="checkpoints"></span></h2><ol id="cp-list"></ol></section>
+      <section class="panel media"><h2><span class="num">05</span> <span data-i="media"></span></h2>
+        <label class="file"><input id="file" type="file" accept="image/*,video/*,.heic,.heif,.mov" multiple /><span data-i="addMedia"></span></label>
+        <p class="note" data-i="mediaNote"></p>
+        <div class="media-ctl"><label><span data-i="mediaDay1"></span> <input id="day1" type="date" /></label><label><span data-i="mediaOffset"></span> <input id="offset" type="number" step="0.5" value="0" min="-14" max="14" /></label></div>
+        <ul id="media-list"></ul></section>
+      <section class="panel loc"><h2><span class="num">04</span> <span data-i="location"></span></h2><svg id="inset" role="img"></svg><div id="loc-coords" class="mono"></div></section>
+      <section class="panel credits"><h2><span class="num">06</span> <span data-i="credits"></span></h2><ul id="sources"></ul></section>
+    </aside>
+    <section class="bottom">
+      <div class="panel chartp"><h2><span class="num">02</span> <span data-i="chart"></span></h2><svg id="chart"></svg></div>
+      <div class="transport">
+        <button id="play" class="play"><span id="play-ico">▶</span> <span id="play-txt"></span></button>
+        <input id="scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Timeline" />
+        <span id="t-now" class="mono">00:00</span>
+        <label class="speed"><span data-i="speed"></span> <select id="speed"><option>30</option><option>60</option><option>120</option><option>240</option><option selected>600</option><option>1200</option><option>2400</option></select>×</label>
+        <button id="loop" aria-pressed="true"><span data-i="loop"></span></button>
+      </div>
+    </section>
+  </main>
+  <div id="viewer" class="viewer hidden" role="dialog" aria-modal="true"><div class="vbox"><button id="viewer-close" data-i="close"></button><div id="viewer-body"></div><div id="viewer-cap" class="mono"></div></div></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

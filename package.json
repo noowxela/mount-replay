@@ -1,0 +1,27 @@
+{
+  "name": "mount-replay",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Mount Kinabalu hike replay: 3D terrain, the summit trail and your own photos, all in the browser",
+  "homepage": "https://noowxela.github.io/mount-replay/",
+  "repository": { "type": "git", "url": "git+https://github.com/noowxela/mount-replay.git" },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "i18n": "node scripts/i18n-check.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "exifr": "^7.1.3",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "playwright-core": "^1.48.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0"
+  }
+}
