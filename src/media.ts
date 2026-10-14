@@ -9,7 +9,7 @@ export interface MediaItem {
   lat: number | null; lon: number | null;      // from GPS metadata
   wall: { date: string; secs: number } | null; // camera wall-clock time: YYYY-MM-DD + seconds of day
   utc: boolean;                                // wall clock derived from a UTC timestamp (video), shown in UTC+8
-  along: number | null; t: number | null; how: 'gps' | 'time' | 'none' | 'offtrail';
+  along: number | null; t: number | null; how: 'gps' | 'time' | 'none' | 'late' | 'offtrail';
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -110,13 +110,15 @@ async function readMeta(item: MediaItem) {
   } catch { /* unreadable metadata: the item stays unplaced (no guessing from the file date) */ }
 }
 
-let seq = 0;
-export type Stage = 'queued' | 'reading' | 'converting' | 'thumb' | 'done' | 'unsupported' | 'error';
+/** Unique across sessions (also the IndexedDB key); numeric part keeps file order for ties. */
+let seq = Date.now() * 1000;
+export const nextId = () => `m${++seq}`;
+export type Stage = 'restoring' | 'queued' | 'reading' | 'converting' | 'thumb' | 'done' | 'unsupported' | 'error';
 /** Imports files in batches of BATCH_SIZE, concurrently inside a batch, reporting each file's stage by its index.
  *  Ids are assigned in file order up front, so the result order is stable whatever finishes first. */
 export async function importFiles(files: FileList | File[], onStage: (i: number, stage: Stage, item?: MediaItem) => void = () => {}): Promise<MediaItem[]> {
   const list = Array.from(files); const out: (MediaItem | null)[] = list.map(() => null);
-  const ids = list.map(() => `m${++seq}`);
+  const ids = list.map(() => nextId());
   const one = async (file: File, i: number) => {
     try {
       const isVideo = file.type.startsWith('video/') || /\.(mov|mp4|m4v)$/i.test(file.name);

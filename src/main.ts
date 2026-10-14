@@ -4,6 +4,7 @@ import { TerrainView, type View } from './terrain';
 import { createChart, type ChartCp, type ChartMedia } from './chart';
 import { drawInset } from './inset';
 import { importFiles, disposeMedia, type MediaItem, type Stage } from './media';
+import { saveItem, loadAllSaved, deleteSaved, clearSaved, restore } from './store';
 import { t, setLang, getLang, type Lang } from './i18n';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector(s) as T;
@@ -44,7 +45,7 @@ function applyText() {
   $('#sources').innerHTML = D.sources.map((s) => `<li>${s}</li>`).join('');
   $('#cp-list').innerHTML = CP.map((c) => `<li><button data-cp="${c.id}"><b><em class="code">${cpCode(CP.indexOf(c))}</em> ${D.cp[c.id as keyof typeof D.cp]}</b><span>${c.ele.toLocaleString('en')} ${D.units.m} · ${(c.along / 1000).toFixed(1)} ${D.units.km}</span><i>${cpKind(c.id)} · ${D.eleSrc[c.eleSrc]}</i></button></li>`).join('');
   drawInset($('#inset') as unknown as SVGSVGElement, L.inset, [CP[CP.length - 1].lat, CP[CP.length - 1].lon], { borneo: D.borneo, sabah: D.sabah, kk: D.kk, peak: D.cp.lowspeak });
-  buildLabels(); renderMedia(); renderProgress(); setPlaying(playing); refreshChartMarkers(); update();
+  buildLabels(); renderMedia(); renderProgress(); if (storeWarn) setStoreNote(storeWarn as 'storeQuota'); setPlaying(playing); refreshChartMarkers(); update();
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang]')) b.onclick = () => { setLang(b.dataset.lang as Lang); applyText(); };
 
@@ -130,6 +131,7 @@ function update() {
 }
 
 // ---------- media ----------
+let day1Manual = false;
 const fileIn = $<HTMLInputElement>('#file'); const day1In = $<HTMLInputElement>('#day1'); const offIn = $<HTMLInputElement>('#offset');
 /** Files being imported: one pending row each (spinner + stage text), then swapped for the real item or left as an error. */
 interface Pending { key: string; name: string; stage: Stage }
@@ -141,8 +143,7 @@ fileIn.onchange = async () => { if (!fileIn.files?.length) return;
   await importFiles(files, (i, stage, item) => {
     const r = rows[i]; r.stage = stage;
     if (stage === 'done' || stage === 'error' || stage === 'unsupported') batch.done++;
-    if (stage === 'done' && item) { pending = pending.filter((p) => p !== r); media.push(item);
-      if (!day1In.value) { const dates = media.map((m) => m.wall?.date).filter(Boolean).sort() as string[]; if (dates.length) day1In.value = dates[0]; }
+    if (stage === 'done' && item) { pending = pending.filter((p) => p !== r); media.push(item); persist(item);
       placeMedia(); } else renderMedia();
     renderProgress();
   });
@@ -151,25 +152,61 @@ function renderProgress() {
   const el = $('#media-progress'); const D = t(); const busy = batch.done < batch.total;
   el.classList.toggle('hidden', !busy); el.innerHTML = busy ? `<span class="spin" aria-hidden="true"></span>${D.processing.replace('{n}', String(Math.min(batch.total, batch.done + 1))).replace('{total}', String(batch.total))}` : '';
 }
-day1In.onchange = offIn.onchange = () => placeMedia();
+day1In.onchange = () => { day1Manual = !!day1In.value; localStorage.setItem('mr-day1', day1Manual ? day1In.value : ''); placeMedia(); };
+offIn.onchange = () => { localStorage.setItem('mr-off', offIn.value); placeMedia(); };
+// ---------- local persistence (IndexedDB, this device only) ----------
+let storeWarn = '';
+function setStoreNote(k: '' | 'storeQuota' | 'storeError') { storeWarn = k; const el = $('#media-store'); el.classList.toggle('hidden', !k); el.textContent = k ? t()[k] : ''; }
+async function persist(item: MediaItem) { const r = await saveItem(item); if (r === 'quota') setStoreNote('storeQuota'); else if (r === 'error' && storeWarn !== 'storeQuota') setStoreNote('storeError'); }
+$('#clear-media').onclick = async () => { for (const m of media) disposeMedia(m); media = []; pending = []; await clearSaved(); setStoreNote(''); placeMedia(); renderProgress(); };
+async function restoreSaved() {
+  const saved = await loadAllSaved(); if (!saved.length) return;
+  const rows: Pending[] = saved.map((r, i) => ({ key: `restore-${i}`, name: r.name, stage: 'restoring' })); pending.push(...rows);
+  batch = { done: 0, total: saved.length }; renderMedia(); renderProgress();
+  await new Promise((r) => setTimeout(r, 0));
+  for (const [i, r] of saved.entries()) {
+    try { const m = restore(r, r.id); media.push(m); pending = pending.filter((p) => p !== rows[i]); }
+    catch { rows[i].stage = 'error'; }
+    batch.done++;
+  }
+  placeMedia(); renderProgress();
+}
+{ const d = localStorage.getItem('mr-day1'); if (d) { day1In.value = d; day1Manual = true; } const o = localStorage.getItem('mr-off'); if (o) offIn.value = o; }
 /** A GPS-tagged photo counts as on the climb only within this distance of the OSM trail line (m). */
 const TRAIL_RADIUS_M = 300;
+/** Photos up to this long before the start / after the finish still count (waiting at the gate, the drive out). */
+const TIME_MARGIN_S = 90 * 60;
+/** Climb time (s from 00:00 of day 1) of a camera wall-clock time, for a given day-1 date. */
+const climbTime = (wall: NonNullable<MediaItem['wall']>, day1: number, off: number) => Math.round((Date.parse(wall.date + 'T00:00:00Z') - day1) / 86400e3) * 86400 + wall.secs - off * 3600;
+const inWindow = (tt: number) => tt >= I.start - TIME_MARGIN_S && tt <= I.end + TIME_MARGIN_S;
+/** Day 1 is not a fixed date: the typical schedule is matched by time of day. Unless the user set it, pick the photo date
+ *  (or the day before, for summit-day shots) that puts the most photos inside the climb; ties go to the earliest. */
+function autoDay1(off: number) {
+  const walls = media.map((m) => m.wall).filter(Boolean) as NonNullable<MediaItem['wall']>[]; if (!walls.length) return '';
+  const cands = [...new Set(walls.flatMap((w) => { const d = Date.parse(w.date + 'T00:00:00Z'); return [d, d - 86400e3]; }))].sort((a, b) => a - b);
+  let best = cands[0], score = -1;
+  for (const c of cands) { const n = walls.filter((w) => inWindow(climbTime(w, c, off))).length; if (n > score) { score = n; best = c; } }
+  return new Date(best).toISOString().slice(0, 10);
+}
 function placeMedia() {
-  const day1 = day1In.value ? Date.parse(day1In.value + 'T00:00:00Z') : NaN; const off = +offIn.value || 0;
+  const off = +offIn.value || 0;
+  if (!day1Manual) day1In.value = autoDay1(off);
+  const day1 = day1In.value ? Date.parse(day1In.value + 'T00:00:00Z') : NaN;
   for (const m of media) {
     m.along = null; m.t = null; m.how = 'none';
-    let tt: number | null = null;
-    if (m.wall && Number.isFinite(day1)) { const days = Math.round((Date.parse(m.wall.date + 'T00:00:00Z') - day1) / 86400e3); tt = days * 86400 + m.wall.secs - off * 3600; }
-    const inClimb = tt != null && tt >= I.start && tt <= I.end; // climb window (typical timeline; there is no recorded track)
+    let tt: number | null = m.wall && Number.isFinite(day1) ? climbTime(m.wall, day1, off) : null;
+    if (tt != null && inWindow(tt)) tt = Math.min(I.end, Math.max(I.start, tt)); else if (tt != null) { m.how = 'late'; tt = null; }
     if (m.lat != null && m.lon != null) {
       // GPS decides: on the trail (within TRAIL_RADIUS_M of the OSM line) it is placed, otherwise it is not placed at all
       const loc = toLocal(L, m.lat, m.lon); const near = nearestAlong(T, loc.x, loc.z);
-      if (near.dist <= TRAIL_RADIUS_M) { m.along = near.along; m.how = 'gps'; m.t = inClimb ? tt : timeAtAlong(I, near.along); } else m.how = 'offtrail';
+      if (near.dist <= TRAIL_RADIUS_M) { m.along = near.along; m.how = 'gps'; m.t = tt ?? timeAtAlong(I, near.along); } else m.how = 'offtrail';
       continue;
     }
-    // no GPS: placed by time only inside the climb window, else not placed
-    if (inClimb) { m.t = tt; m.along = alongAt(I, tt!); m.how = 'time'; }
+    // no GPS: placed by time of day on the typical schedule, else not placed
+    if (tt != null) { m.t = tt; m.along = alongAt(I, tt); m.how = 'time'; }
   }
+  const noGps = media.filter((m) => m.kind === 'image' && m.lat == null).length;
+  $('#media-hint').classList.toggle('hidden', !noGps); $('#media-hint').textContent = noGps ? t().noGpsHint.replace('{n}', String(noGps)) : '';
   media.sort((a, b) => (a.t ?? 1e12) - (b.t ?? 1e12) || +a.id.slice(1) - +b.id.slice(1)); // stable: ties keep file order
   renderMedia(); buildLabels(); refreshChartMarkers();
 }
@@ -178,12 +215,12 @@ function renderMedia() {
   const pend = pending.map((p) => { const err = p.stage === 'error' || p.stage === 'unsupported';
     return `<li class="pending${err ? ' failed' : ''}" data-p="${p.key}"><span class="th">${err ? '<span class="ph err">!</span>' : '<span class="shimmer"></span>'}</span><span class="mi"><b>${p.name}</b><i>${err ? '' : '<span class="spin" aria-hidden="true"></span>'}${(D.stage as Record<string, string>)[p.stage]}</i></span>${err ? '<button class="rm" aria-label="remove">×</button>' : '<span></span>'}</li>`; }).join('');
   if (!media.length && !pending.length) { ul.innerHTML = `<li class="empty">${D.mediaNone}</li>`; return; }
-  const how = { gps: D.placedGps, time: D.placedTime, none: D.unplaced, offtrail: D.offTrail };
+  const how = { gps: D.placedGps, time: D.placedTime, none: D.unplaced, late: D.unplacedTime, offtrail: D.offTrail };
   ul.innerHTML = pend + media.map((m) => `<li data-m="${m.id}" class="${m.how}"><span class="th">${m.thumb ? `<img src="${m.thumb}" alt="">` : `<span class="ph">${m.heic ? 'HEIC' : m.kind === 'video' ? '▶' : '◻'}</span>`}</span><span class="mi"><b>${m.name}</b><i>${how[m.how]}${m.t != null ? ` · ${D.day} ${m.t >= 86400 ? 2 : 1} ${fmtClock(m.t)}` : ''}${m.heic && !m.thumb ? ` · ${D.heicNote}` : ''}</i></span><button class="rm" aria-label="remove">×</button></li>`).join('');
   for (const li of ul.querySelectorAll<HTMLElement>('li[data-p]')) li.querySelector('.rm')?.addEventListener('click', (e) => { e.stopPropagation(); pending = pending.filter((p) => p.key !== li.dataset.p); renderMedia(); });
   for (const li of ul.querySelectorAll<HTMLElement>('li[data-m]')) {
     const m = media.find((x) => x.id === li.dataset.m)!;
-    li.querySelector('.rm')!.addEventListener('click', (e) => { e.stopPropagation(); disposeMedia(m); media = media.filter((x) => x !== m); renderMedia(); buildLabels(); refreshChartMarkers(); });
+    li.querySelector('.rm')!.addEventListener('click', (e) => { e.stopPropagation(); disposeMedia(m); void deleteSaved(m.id); media = media.filter((x) => x !== m); renderMedia(); buildLabels(); refreshChartMarkers(); });
     li.onclick = () => { if (m.t != null) { clock = m.t; update(); } openViewer(m); };
   }
 }
@@ -214,7 +251,7 @@ function frame(now: number) {
   placeLabels();
   requestAnimationFrame(frame);
 }
-setLang(getLang()); applyText(); update();
+setLang(getLang()); applyText(); update(); void restoreSaved();
 if (params.get('view')) view.setView(params.get('view') as View, true);
 else if (!reduced) view.setView('auto');
 requestAnimationFrame(frame);

@@ -31,9 +31,11 @@
         <p class="note" data-i="typicalNote"></p></section>
       <section class="panel cps"><h2><span class="num">02</span> <span data-i="checkpoints"></span></h2><ol id="cp-list"></ol></section>
       <section class="panel media"><h2><span class="num">05</span> <span data-i="media"></span></h2>
-        <label class="file"><input id="file" type="file" accept="image/*,video/*,.heic,.heif,.mov" multiple /><span data-i="addMedia"></span></label>
+        <label class="file"><input id="file" type="file" accept="image/*,video/*,.heic,.heif,.mov" multiple /><span data-i="addMedia"></span></label> <button id="clear-media" class="clear-media" data-i="clearMedia"></button>
         <div id="media-progress" class="media-progress mono hidden" role="status" aria-live="polite"></div>
         <p class="note" data-i="mediaNote"></p>
+        <p id="media-store" class="note store-warn hidden" role="status"></p>
+        <p id="media-hint" class="note hint-gps hidden" role="note"></p>
         <div class="media-ctl"><label><span data-i="mediaDay1"></span> <input id="day1" type="date" /></label><label><span data-i="mediaOffset"></span> <input id="offset" type="number" step="0.5" value="0" min="-14" max="14" /></label></div>
         <ul id="media-list"></ul></section>
       <section class="panel loc"><h2><span class="num">04</span> <span data-i="location"></span></h2><svg id="inset" role="img"></svg><div id="loc-coords" class="mono"></div></section>

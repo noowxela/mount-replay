@@ -16,7 +16,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "i18n": "node scripts/i18n-check.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:base": "node scripts/smoke-base.mjs"
   },
   "dependencies": {
     "exifr": "^7.1.3",

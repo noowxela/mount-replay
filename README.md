@@ -16,6 +16,7 @@ Live (after the first Pages deploy): https://noowxela.github.io/mount-replay/
 - **Elevation panel**: time-axis profile with an orange gradient fill, a gridline every 100 m, checkpoint labels, photo/video markers that cluster instead of overlapping, Back / The next / Trace, play/pause, a slider, speed and loop controls.
 - **Your photos and videos**: EXIF GPS and capture time via exifr (JPEG, PNG, WebP, **HEIC/HEIF**); QuickTime/MP4 creation time and ISO 6709 location for videos. HEIC is converted to JPEG in the browser for display.
 - **Trail filter**: files with GPS are placed only within **300 m** of the trail. Others show as "Outside the trail — not placed".
+- **Kept on this device**: imported files, their thumbnails and metadata are saved in IndexedDB, so they survive a reload. **Clear my photos** removes them. If storage is full, you are told which photos won't be kept.
 - **Batched import**: 20 files at a time, with metadata and thumbnails in parallel and HEIC decoded in a Web Worker pool. Each file gets a status row, with "Processing n of N" overall.
 - **Languages**: English, 中文, Bahasa Melayu.
 - Respects `prefers-reduced-motion`; responsive down to 390 px.
@@ -29,7 +30,8 @@ Live (after the first Pages deploy): https://noowxela.github.io/mount-replay/
 
 **Placement rules** for uploaded files (`src/main.ts`, `placeMedia`):
 - **Has GPS**: if it is within `TRAIL_RADIUS_M = 300` m of the OSM trail line, it snaps to the nearest trail point. Its time is the capture time if that falls inside the climb, otherwise the typical time at that point. **If it is further away, it is not placed at all**, whatever its time.
-- **No GPS, has a capture time**: it is placed by time only if the time falls inside the climb window. Use the "Day 1 date" and "camera clock offset" fields to line your day up. Otherwise it is "No location — not placed".
+- **No GPS, has a capture time**: it is matched by **time of day** against the typical two-day schedule, not by a fixed date. Day 1 is anchored to your photos automatically: the photo date (or the day before) that puts the most photos inside the climb wins. You can override it with the "Day 1 date" field, and fix the camera clock with "camera clock offset". Times up to 90 min before the start or after the finish snap to the start or finish. Anything else is "No location; time outside the climb — not placed".
+- **iPhone**: Safari's photo picker strips location unless you tap **Options → Location** when choosing photos. When photos arrive without GPS, the app shows a hint saying so.
 - Excluded files never touch the chart, map or time axis. The axis always covers just the climb.
 
 ## Data sources and attribution
@@ -61,6 +63,7 @@ npm run i18n           # EN / zh / ms key parity
 npm run build          # typecheck + production build into dist/
 npx vite preview --port 4173 --host 127.0.0.1 &
 npm run smoke -- http://127.0.0.1:4173/ shots          # Playwright smoke check + screenshots
+npm run smoke:base     # same check on a production build served under /mount-replay/ (as on GitHub Pages)
 node scripts/bench-import.mjs http://127.0.0.1:4173/ 20  # import timing for 20 HEIC photos
 ```
 
@@ -76,6 +79,7 @@ src/main.ts             state, replay loop, labels, transport, media placement
 src/data.ts             data loading, typical itinerary, trail helpers
 src/terrain.ts          Three.js dot/contour terrain and cameras
 src/chart.ts            elevation panel (SVG)
+src/store.ts            IndexedDB persistence (local only)
 src/media.ts            file import: EXIF / QuickTime metadata, HEIC, thumbnails, batching
 src/heic.worker.ts      HEIC → JPEG worker (libheif WASM + OffscreenCanvas)
 src/inset.ts            Borneo location inset
@@ -92,7 +96,7 @@ docs/screenshots/       README images
 
 ## Privacy
 
-Your photos and videos never leave your device. They are read in the browser with the File API, and metadata, HEIC conversion and thumbnails all happen locally. Nothing is uploaded and there is no analytics.
+Your photos and videos never leave your device. They are read in the browser with the File API, and metadata, HEIC conversion and thumbnails all happen locally. Nothing is uploaded and there is no analytics. To survive a reload, the original files, thumbnails and parsed metadata are stored in this browser's IndexedDB (origin-local; not synced anywhere). **Clear my photos**, or clearing site data, deletes them.
 
 ## Licence
 

@@ -1,5 +1,7 @@
 node_modules
 dist
+dist-base
+shots-base
 shots
 .DS_Store
 # local caches and logs

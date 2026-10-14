@@ -43,6 +43,8 @@ async function open(name, q, vp) {
   const p = await ctx.newPage();
   p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`[${name}] ${m.type()}: ${m.text()}`); });
   p.on('pageerror', (e) => errors.push(`[${name}] pageerror: ${e.message}`));
+  p.on('requestfailed', (r) => errors.push(`[${name}] requestfailed: ${r.url()} ${r.failure()?.errorText}`));
+  p.on('response', (r) => { if (r.status() >= 400) errors.push(`[${name}] HTTP ${r.status()}: ${r.url()}`); });
   await p.goto(`${base}?${q}`, { waitUntil: 'networkidle', timeout: 120000 });
   await p.waitForFunction(() => window.__mr?.ready, null, { timeout: 60000 }); await sleep(2500); return p;
 }
@@ -104,6 +106,24 @@ const progCleared = await d.evaluate(() => document.getElementById('media-progre
 await d.click('#btn-next'); await sleep(200); await d.click('#btn-back'); await sleep(200);
 await d.click('[data-view="follow"]'); await sleep(2500); await d.screenshot({ path: `${out}/04-desktop-follow-media.png` });
 await d.click('#btn-mono'); await d.click('[data-view="top"]'); await sleep(2200); await d.screenshot({ path: `${out}/05-desktop-top-mono.png` });
+// persistence: reload keeps the photos (restored from IndexedDB), Clear my photos empties it
+const nBefore = await d.evaluate(() => window.__mr.media().length);
+await d.reload({ waitUntil: 'networkidle' }); await d.waitForFunction(() => window.__mr?.ready);
+const sawRestoring = await d.waitForFunction(() => window.__mr.pending().some((p) => p.stage === 'restoring') || window.__mr.media().length > 0, null, { timeout: 20000, polling: 10 }).then(() => true).catch(() => false);
+await d.waitForFunction((n) => window.__mr.media().length >= n, nBefore, { timeout: 30000 }).catch(() => {});
+const restored = await d.evaluate(() => ({ n: window.__mr.media().length, thumbs: window.__mr.media().filter((m) => m.thumb).length, heic: window.__mr.media().find((m) => m.heic)?.decoded, onTrail: window.__mr.media().find((m) => m.name === '_ontrail.jpg')?.how }));
+if (!sawRestoring || restored.n !== nBefore || restored.onTrail !== 'gps' || !restored.heic) bad.push(`persistence restore failed: ${JSON.stringify({ nBefore, restored })}`);
+await d.click('#clear-media'); await sleep(300); await d.reload({ waitUntil: 'networkidle' }); await d.waitForFunction(() => window.__mr?.ready); await sleep(800);
+const afterClear = await d.evaluate(() => window.__mr.media().length); if (afterClear !== 0) bad.push(`clear my photos failed: ${afterClear} left`);
+// no GPS, real climb on other dates: matched by time of day (day 1 anchored to the photos), 07:00 is inside the margin
+const a = await open('anchor', 'lang=en&autoplay=0', { width: 1440, height: 900 });
+const anchorFiles = [['2026-03-02 07:00:00', 'a0'], ['2026-03-02 11:30:00', 'a1'], ['2026-03-03 05:30:00', 'a2'], ['2026-03-04 12:00:00', 'a3']].map(([w, n]) => { const f = `${out}/_${n}.jpg`; writeFileSync(f, exifJpeg(w.replace(/-/g, ':'))); return f; });
+await a.setInputFiles('#file', anchorFiles); await a.waitForFunction(() => window.__mr.media().length >= 4, null, { timeout: 20000 });
+const anchored = await a.evaluate(() => ({ day1: document.getElementById('day1').value, items: window.__mr.media().map((m) => [m.name, m.how, m.t]) }));
+const hw = Object.fromEntries(anchored.items.map(([n, h]) => [n, h]));
+if (anchored.day1 !== '2026-03-02' || hw['_a0.jpg'] !== 'time' || hw['_a1.jpg'] !== 'time' || hw['_a2.jpg'] !== 'time' || hw['_a3.jpg'] !== 'late') bad.push(`time-of-day anchoring wrong: ${JSON.stringify(anchored)}`);
+const hint = await a.evaluate(() => !document.getElementById('media-hint').classList.contains('hidden') && document.getElementById('media-hint').textContent);
+if (!hint) bad.push('no-GPS hint not shown');
 // zh + ms text present
 for (const lg of ['zh', 'ms']) { const p = await open(`desktop-${lg}`, `lang=${lg}&autoplay=0`, { width: 1440, height: 900 }); const h = await p.textContent('.cps h2'); if (!h || /Checkpoints/.test(h)) bad.push(`${lg} not translated (${h})`); if (lg === 'zh') await p.screenshot({ path: `${out}/06-desktop-zh.png` }); }
 // mobile
@@ -114,7 +134,7 @@ await m.setInputFiles('#file', [`${out}/_test.jpg`, ...extraFiles]); await sleep
 for (const lg of ['zh', 'ms']) { const p = await open(`bottom-${lg}`, `lang=${lg}&autoplay=0&t=30`, { width: 1440, height: 900 }); await p.locator('.bottom').screenshot({ path: `${out}/10-desktop-bottom-${lg}.png` }); }
 const overflow = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (overflow > 1) bad.push(`mobile horizontal overflow ${overflow}px`);
 await browser.close();
-console.log(JSON.stringify({ c0, c1, nightShown, after, placed, loading, heic, heicHow, onTrail, ticks, mticks, batchSeen, batchMs, overlaps, cpLabels }));
+console.log(JSON.stringify({ c0, c1, nightShown, after, placed, loading, heic, heicHow, onTrail, ticks, mticks, batchSeen, batchMs, restored, afterClear, anchored, overlaps, cpLabels }));
 console.log(bad.length ? 'BAD\n' + bad.join('\n') : 'smoke OK');
 console.log(errors.length ? errors.join('\n') : 'No console errors or warnings.');
 process.exit(bad.length || errors.length ? 1 : 0);
