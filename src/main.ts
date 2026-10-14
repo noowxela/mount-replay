@@ -152,19 +152,25 @@ function renderProgress() {
   el.classList.toggle('hidden', !busy); el.innerHTML = busy ? `<span class="spin" aria-hidden="true"></span>${D.processing.replace('{n}', String(Math.min(batch.total, batch.done + 1))).replace('{total}', String(batch.total))}` : '';
 }
 day1In.onchange = offIn.onchange = () => placeMedia();
+/** A GPS-tagged photo counts as on the climb only within this distance of the OSM trail line (m). */
+const TRAIL_RADIUS_M = 300;
 function placeMedia() {
   const day1 = day1In.value ? Date.parse(day1In.value + 'T00:00:00Z') : NaN; const off = +offIn.value || 0;
   for (const m of media) {
     m.along = null; m.t = null; m.how = 'none';
     let tt: number | null = null;
     if (m.wall && Number.isFinite(day1)) { const days = Math.round((Date.parse(m.wall.date + 'T00:00:00Z') - day1) / 86400e3); tt = days * 86400 + m.wall.secs - off * 3600; }
+    const inClimb = tt != null && tt >= I.start && tt <= I.end; // climb window (typical timeline; there is no recorded track)
     if (m.lat != null && m.lon != null) {
+      // GPS decides: on the trail (within TRAIL_RADIUS_M of the OSM line) it is placed, otherwise it is not placed at all
       const loc = toLocal(L, m.lat, m.lon); const near = nearestAlong(T, loc.x, loc.z);
-      if (near.dist < 400) { m.along = near.along; m.how = 'gps'; m.t = tt != null && tt >= I.start && tt <= I.end ? tt : timeAtAlong(I, near.along); continue; }
+      if (near.dist <= TRAIL_RADIUS_M) { m.along = near.along; m.how = 'gps'; m.t = inClimb ? tt : timeAtAlong(I, near.along); } else m.how = 'offtrail';
+      continue;
     }
-    if (tt != null) { if (tt >= I.start && tt <= I.end) { m.t = tt; m.along = alongAt(I, tt); m.how = 'time'; } else m.how = 'outside'; }
+    // no GPS: placed by time only inside the climb window, else not placed
+    if (inClimb) { m.t = tt; m.along = alongAt(I, tt!); m.how = 'time'; }
   }
-  media.sort((a, b) => (a.t ?? 1e12) - (b.t ?? 1e12));
+  media.sort((a, b) => (a.t ?? 1e12) - (b.t ?? 1e12) || +a.id.slice(1) - +b.id.slice(1)); // stable: ties keep file order
   renderMedia(); buildLabels(); refreshChartMarkers();
 }
 function renderMedia() {
@@ -172,7 +178,7 @@ function renderMedia() {
   const pend = pending.map((p) => { const err = p.stage === 'error' || p.stage === 'unsupported';
     return `<li class="pending${err ? ' failed' : ''}" data-p="${p.key}"><span class="th">${err ? '<span class="ph err">!</span>' : '<span class="shimmer"></span>'}</span><span class="mi"><b>${p.name}</b><i>${err ? '' : '<span class="spin" aria-hidden="true"></span>'}${(D.stage as Record<string, string>)[p.stage]}</i></span>${err ? '<button class="rm" aria-label="remove">×</button>' : '<span></span>'}</li>`; }).join('');
   if (!media.length && !pending.length) { ul.innerHTML = `<li class="empty">${D.mediaNone}</li>`; return; }
-  const how = { gps: D.placedGps, time: D.placedTime, none: D.unplaced, outside: D.outside };
+  const how = { gps: D.placedGps, time: D.placedTime, none: D.unplaced, offtrail: D.offTrail };
   ul.innerHTML = pend + media.map((m) => `<li data-m="${m.id}" class="${m.how}"><span class="th">${m.thumb ? `<img src="${m.thumb}" alt="">` : `<span class="ph">${m.heic ? 'HEIC' : m.kind === 'video' ? '▶' : '◻'}</span>`}</span><span class="mi"><b>${m.name}</b><i>${how[m.how]}${m.t != null ? ` · ${D.day} ${m.t >= 86400 ? 2 : 1} ${fmtClock(m.t)}` : ''}${m.heic && !m.thumb ? ` · ${D.heicNote}` : ''}</i></span><button class="rm" aria-label="remove">×</button></li>`).join('');
   for (const li of ul.querySelectorAll<HTMLElement>('li[data-p]')) li.querySelector('.rm')?.addEventListener('click', (e) => { e.stopPropagation(); pending = pending.filter((p) => p.key !== li.dataset.p); renderMedia(); });
   for (const li of ul.querySelectorAll<HTMLElement>('li[data-m]')) {

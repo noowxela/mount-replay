@@ -4,6 +4,7 @@
 import type { Loaded, Itinerary } from './data';
 import { alongAt, fromActive, toActive, activeDuration, trailAt } from './data';
 const NS = 'http://www.w3.org/2000/svg';
+const TICK_M = 100; const LABEL_STEPS = [100, 200, 500, 1000];
 export interface ChartCp { id: string; short: string; full: string; t: number }
 export interface ChartMedia { id: string; t: number; kind: 'image' | 'video' }
 export type ChartHit = { kind: 'cp'; id: string; t: number } | { kind: 'media'; ids: string[]; t: number };
@@ -28,7 +29,11 @@ export function createChart(svg: SVGSVGElement, L: Loaded, I: Itinerary, onScrub
     el('stop', { offset: 0, 'stop-color': '#ff8a3d', 'stop-opacity': 0.55 }, gr); el('stop', { offset: 1, 'stop-color': '#ff8a3d', 'stop-opacity': 0.02 }, gr);
     const cp = el('clipPath', { id: 'chpassed' }, defs); clipRect = el('rect', { x: 0, y: 0, width: 0, height: H }, cp);
     // axes
-    for (const h of [2000, 3000, 4000]) { el('line', { x1: pad.l, x2: W - pad.r, y1: y(h), y2: y(h), class: 'grid' }); el('text', { x: pad.l - 8, y: y(h) + 3.5, class: 'ax', 'text-anchor': 'end' }).textContent = h.toLocaleString('en'); }
+    // light gridline every 100 m; labels on 100 m steps, thinned to 200 / 500 / 1000 m when closer than 14 px
+    const ticks: number[] = []; for (let h = Math.ceil(1700 / TICK_M) * TICK_M; h <= 4300; h += TICK_M) ticks.push(h);
+    const pxPerM = Math.abs(y(0) - y(1)); const lstep = LABEL_STEPS.find((st) => st * pxPerM >= 14) ?? 1000;
+    ticks.forEach((h) => { el('line', { x1: pad.l, x2: W - pad.r, y1: y(h), y2: y(h), class: 'grid', 'data-h': h });
+      if (h % lstep === 0) el('text', { x: pad.l - 8, y: y(h) + 3.5, class: 'ax ytick', 'text-anchor': 'end' }).textContent = h.toLocaleString('en'); });
     const step = W < 600 ? 4 * 3600 : 2 * 3600;
     for (let c = Math.ceil(I.start / step) * step; c <= I.end; c += step) {
       if (c > I.gap.from && c < I.gap.to) continue;

@@ -17,7 +17,7 @@ const en = {
   parkhq: 'Park HQ', borneo: 'Borneo', sabah: 'Sabah', kk: 'Kota Kinabalu',
   media: 'Your photos', addMedia: 'Add photos / videos', mediaNote: 'Files stay on this device: nothing is uploaded.',
   mediaDay1: 'Day 1 date', mediaOffset: 'Camera clock offset (h)', mediaNone: 'No photos yet.',
-  placedGps: 'GPS: snapped to the trail', placedTime: 'Time only: placed on the typical timeline', unplaced: 'No GPS or time: not placed', outside: 'Time outside the climb',
+  placedGps: 'GPS: snapped to the trail', placedTime: 'Time only: placed on the typical timeline', unplaced: 'No location — not placed', offTrail: 'Outside the trail — not placed',
   heicNote: 'HEIC: metadata read; the image could not be decoded', close: 'Close',
   units: { m: 'm', km: 'km' },
   sources: [
@@ -47,7 +47,7 @@ const zh: Dict = {
   parkhq: '公园总部', borneo: '婆罗洲', sabah: '沙巴', kk: '亚庇',
   media: '您的照片', addMedia: '添加照片／视频', mediaNote: '文件只留在本设备上，不会上传。',
   mediaDay1: '第 1 天日期', mediaOffset: '相机时钟偏差（小时）', mediaNone: '还没有照片。',
-  placedGps: 'GPS：已对齐到步道', placedTime: '仅有时间：按典型时间线放置', unplaced: '没有 GPS 或时间：未放置', outside: '时间不在登山期间',
+  placedGps: 'GPS：已对齐到步道', placedTime: '仅有时间：按典型时间线放置', unplaced: '无位置 — 未放置', offTrail: '不在步道范围内 — 未放置',
   heicNote: 'HEIC：已读取元数据；无法解码图像', close: '关闭',
   units: { m: '米', km: '公里' },
   sources: [
@@ -76,7 +76,7 @@ const ms: Dict = {
   parkhq: 'Ibu Pejabat Taman', borneo: 'Borneo', sabah: 'Sabah', kk: 'Kota Kinabalu',
   media: 'Foto anda', addMedia: 'Tambah foto / video', mediaNote: 'Fail kekal pada peranti ini: tiada yang dimuat naik.',
   mediaDay1: 'Tarikh hari 1', mediaOffset: 'Ofset jam kamera (j)', mediaNone: 'Belum ada foto.',
-  placedGps: 'GPS: dilekatkan pada denai', placedTime: 'Masa sahaja: diletakkan pada garis masa biasa', unplaced: 'Tiada GPS atau masa: tidak diletakkan', outside: 'Masa di luar pendakian',
+  placedGps: 'GPS: dilekatkan pada denai', placedTime: 'Masa sahaja: diletakkan pada garis masa biasa', unplaced: 'Tiada lokasi — tidak diletakkan', offTrail: 'Di luar denai — tidak diletakkan',
   heicNote: 'HEIC: metadata dibaca; imej tidak dapat dinyahkod', close: 'Tutup',
   units: { m: 'm', km: 'km' },
   sources: [

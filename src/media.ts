@@ -9,7 +9,7 @@ export interface MediaItem {
   lat: number | null; lon: number | null;      // from GPS metadata
   wall: { date: string; secs: number } | null; // camera wall-clock time: YYYY-MM-DD + seconds of day
   utc: boolean;                                // wall clock derived from a UTC timestamp (video), shown in UTC+8
-  along: number | null; t: number | null; how: 'gps' | 'time' | 'none' | 'outside';
+  along: number | null; t: number | null; how: 'gps' | 'time' | 'none' | 'offtrail';
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -61,46 +61,77 @@ async function thumbnail(item: MediaItem): Promise<string | null> {
   } catch { return null; } // e.g. HEIC in a browser without HEIC decoding: a placeholder is shown
 }
 
-/** HEIC/HEIF -> JPEG blob. Uses the browser's own decoder when it has one (Safari), else heic2any (libheif, WASM),
- *  loaded on demand so it does not weigh on the first paint. Metadata is always read from the ORIGINAL file. */
+/** Files are processed in batches of BATCH_SIZE: metadata reads, HEIC decodes and thumbnails run concurrently inside a batch. */
+export const BATCH_SIZE = 20;
+const POOL = Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2));
+
+/** Small pool of HEIC decode workers (libheif WASM + OffscreenCanvas), created lazily on the first HEIC. */
+let workers: { w: Worker; busy: boolean }[] | null = null; let wseq = 0;
+const waiting: (() => void)[] = []; const replies = new Map<number, (r: { blob?: Blob; error?: string }) => void>();
+function pool() {
+  if (!workers) workers = Array.from({ length: POOL }, () => { const w = new Worker(new URL('./heic.worker.ts', import.meta.url), { type: 'module' });
+    w.onmessage = (e) => { replies.get(e.data.id)?.(e.data); replies.delete(e.data.id); }; return { w, busy: false }; });
+  return workers;
+}
+async function workerDecode(file: File): Promise<Blob> {
+  const ws = pool(); let slot = ws.find((x) => !x.busy);
+  while (!slot) { await new Promise<void>((r) => waiting.push(r)); slot = ws.find((x) => !x.busy); }
+  slot.busy = true;
+  try { const buf = await file.arrayBuffer(); const id = ++wseq;
+    const r = await new Promise<{ blob?: Blob; error?: string }>((res) => { replies.set(id, res); slot!.w.postMessage({ id, buf }, [buf]); });
+    if (!r.blob) throw new Error(r.error || 'decode'); return r.blob;
+  } finally { slot.busy = false; waiting.shift()?.(); }
+}
+const nativeHeic = (async () => { try { const probe = await fetch('data:image/heic;base64,AAAAGGZ0eXBoZWljAAAAAG1pZjFoZWlj').then((r) => r.blob()); await createImageBitmap(probe); return true; } catch { return false; } })();
+/** HEIC/HEIF -> JPEG blob: the browser's own decoder when it has one (Safari), else the worker pool, else heic2any.
+ *  Metadata is always read from the ORIGINAL file. */
 async function decodeHeic(file: File): Promise<Blob | null> {
-  try { const bmp = await createImageBitmap(file); const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d')!.drawImage(bmp, 0, 0); bmp.close();
-    const b = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.9)); if (b) return b; } catch { /* no native HEIC decoding */ }
+  if (await nativeHeic) { try { const bmp = await createImageBitmap(file); const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d')!.drawImage(bmp, 0, 0); bmp.close();
+    const b = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.9)); if (b) return b; } catch { /* fall through */ } }
+  try { return await workerDecode(file); } catch (e) { console.info('HEIC worker decode failed, trying heic2any', e); }
   try { const { default: heic2any } = await import('heic2any'); const r = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 }); return Array.isArray(r) ? r[0] : r; }
   catch (e) { console.info('HEIC decode failed', e); return null; }
 }
 
+async function readMeta(item: MediaItem) {
+  const file = item.file;
+  try {
+    if (item.kind === 'image') {
+      const [tags, gps] = await Promise.all([
+        exifr.parse(file, { reviveValues: false, pick: ['DateTimeOriginal', 'CreateDate', 'DateTimeDigitized'] }).catch(() => null),
+        exifr.gps(file).catch(() => null)]);
+      item.wall = wallFromExif(tags?.DateTimeOriginal ?? tags?.CreateDate ?? tags?.DateTimeDigitized);
+      if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) { item.lat = gps.latitude; item.lon = gps.longitude; }
+    } else {
+      const q = await readQuickTime(file);
+      if (q.created) { item.wall = wallFromUtc(q.created); item.utc = true; }
+      item.lat = q.lat; item.lon = q.lon;
+    }
+  } catch { /* unreadable metadata: the item stays unplaced (no guessing from the file date) */ }
+}
+
 let seq = 0;
 export type Stage = 'queued' | 'reading' | 'converting' | 'thumb' | 'done' | 'unsupported' | 'error';
-/** Imports files one by one, reporting each stage so the UI can show a pending row per file. */
+/** Imports files in batches of BATCH_SIZE, concurrently inside a batch, reporting each file's stage by its index.
+ *  Ids are assigned in file order up front, so the result order is stable whatever finishes first. */
 export async function importFiles(files: FileList | File[], onStage: (i: number, stage: Stage, item?: MediaItem) => void = () => {}): Promise<MediaItem[]> {
-  const out: MediaItem[] = [];
-  for (const [i, file] of Array.from(files).entries()) {
-   try {
-    const isVideo = file.type.startsWith('video/') || /\.(mov|mp4|m4v)$/i.test(file.name);
-    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|heic|heif|webp)$/i.test(file.name);
-    if (!isVideo && !isImage) { onStage(i, 'unsupported'); continue; }
-    onStage(i, 'reading');
-    const item: MediaItem = { id: `m${++seq}`, file, name: file.name, kind: isVideo ? 'video' : 'image', heic: /\.(heic|heif)$/i.test(file.name) || /hei[cf]/.test(file.type),
-      url: URL.createObjectURL(file), thumb: null, decoded: false, lat: null, lon: null, wall: null, utc: false, along: null, t: null, how: 'none' };
+  const list = Array.from(files); const out: (MediaItem | null)[] = list.map(() => null);
+  const ids = list.map(() => `m${++seq}`);
+  const one = async (file: File, i: number) => {
     try {
-      if (isImage) {
-        const tags = await exifr.parse(file, { reviveValues: false, pick: ['DateTimeOriginal', 'CreateDate', 'DateTimeDigitized'] }).catch(() => null);
-        item.wall = wallFromExif(tags?.DateTimeOriginal ?? tags?.CreateDate ?? tags?.DateTimeDigitized);
-        const gps = await exifr.gps(file).catch(() => null);
-        if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) { item.lat = gps.latitude; item.lon = gps.longitude; }
-      } else {
-        const q = await readQuickTime(file);
-        if (q.created) { item.wall = wallFromUtc(q.created); item.utc = true; }
-        item.lat = q.lat; item.lon = q.lon;
-      }
-    } catch { /* unreadable metadata: the item stays unplaced */ }
-    if (!item.wall && file.lastModified) { /* no capture time in the file: leave unplaced rather than guess from the file date */ }
-    if (item.heic) { onStage(i, 'converting'); await new Promise((r) => setTimeout(r, 0)); const jpg = await decodeHeic(file); if (jpg) { URL.revokeObjectURL(item.url); item.url = URL.createObjectURL(jpg); item.decoded = true; } }
-    onStage(i, 'thumb'); item.thumb = await thumbnail(item);
-    out.push(item); onStage(i, 'done', item);
-   } catch (e) { console.info('import failed', file.name, e); onStage(i, 'error'); }
-  }
-  return out;
+      const isVideo = file.type.startsWith('video/') || /\.(mov|mp4|m4v)$/i.test(file.name);
+      const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|heic|heif|webp)$/i.test(file.name);
+      if (!isVideo && !isImage) { onStage(i, 'unsupported'); return; }
+      onStage(i, 'reading');
+      const item: MediaItem = { id: ids[i], file, name: file.name, kind: isVideo ? 'video' : 'image', heic: /\.(heic|heif)$/i.test(file.name) || /hei[cf]/.test(file.type),
+        url: URL.createObjectURL(file), thumb: null, decoded: false, lat: null, lon: null, wall: null, utc: false, along: null, t: null, how: 'none' };
+      await readMeta(item);
+      if (item.heic) { onStage(i, 'converting'); const jpg = await decodeHeic(file); if (jpg) { URL.revokeObjectURL(item.url); item.url = URL.createObjectURL(jpg); item.decoded = true; } }
+      onStage(i, 'thumb'); item.thumb = await thumbnail(item);
+      out[i] = item; onStage(i, 'done', item);
+    } catch (e) { console.info('import failed', file.name, e); onStage(i, 'error'); }
+  };
+  for (let b = 0; b < list.length; b += BATCH_SIZE) await Promise.all(list.slice(b, b + BATCH_SIZE).map((f, k) => one(f, b + k)));
+  return out.filter((x): x is MediaItem => !!x);
 }
 export function disposeMedia(m: MediaItem) { URL.revokeObjectURL(m.url); if (m.thumb) URL.revokeObjectURL(m.thumb); }
