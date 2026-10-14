@@ -8,8 +8,8 @@ const exe = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents
 const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--ignore-gpu-blocklist', '--use-angle=metal'] });
 const errors = [], bad = []; const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // a tiny JPEG with EXIF DateTimeOriginal 2024:05:11 09:40:00 (day 1, on the way up)
-function exifJpeg() {
-  const dt = Buffer.from('2024:05:11 09:40:00\0', 'latin1');
+function exifJpeg(when = '2024:05:11 09:40:00') {
+  const dt = Buffer.from(when + '\0', 'latin1');
   const ifd = Buffer.alloc(2 + 12 + 4); ifd.writeUInt16BE(1, 0); ifd.writeUInt16BE(0x8769, 2); ifd.writeUInt16BE(4, 4); ifd.writeUInt32BE(1, 6); ifd.writeUInt32BE(8 + 18, 10); ifd.writeUInt32BE(0, 14);
   const sub = Buffer.alloc(2 + 12 + 4); sub.writeUInt16BE(1, 0); sub.writeUInt16BE(0x9003, 2); sub.writeUInt16BE(2, 4); sub.writeUInt32BE(dt.length, 6); sub.writeUInt32BE(8 + 18 + 18, 10); sub.writeUInt32BE(0, 14);
   const tiff = Buffer.concat([Buffer.from('MM\0\x2a\0\0\0\x08', 'latin1'), ifd, sub, dt]);
@@ -19,6 +19,10 @@ function exifJpeg() {
   return Buffer.concat([px.subarray(0, 2), Buffer.from([0xff, 0xe1]), len, app1, px.subarray(2)]);
 }
 writeFileSync(`${out}/_test.jpg`, exifJpeg());
+// more photos for the chart markers, incl. near-simultaneous shots that must cluster rather than overlap
+const extra = ['2024:05:11 08:20:00', '2024:05:11 10:15:00', '2024:05:11 10:16:00', '2024:05:11 10:17:30', '2024:05:11 11:30:00', '2024:05:11 12:40:00', '2024:05:12 04:10:00', '2024:05:12 05:40:00', '2024:05:12 05:44:00', '2024:05:12 07:30:00', '2024:05:12 12:00:00'];
+const extraFiles = extra.map((w, i) => { const f = `${out}/_p${i}.jpg`; writeFileSync(f, exifJpeg(w)); return f; });
+const heicFile = new URL('./fixtures/heic-iphone7.heic', import.meta.url).pathname; // iPhone 7 HEIC with GPS + time (exifr test fixture, MIT)
 async function open(name, q, vp) {
   const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: vp.width < 500 ? 3 : 1, isMobile: vp.width < 500, hasTouch: vp.width < 500 });
   const p = await ctx.newPage();
@@ -40,15 +44,34 @@ await d.click('#play'); await d.click('[data-view="oblique"]'); await sleep(2200
 await d.setInputFiles('#file', `${out}/_test.jpg`); await sleep(1500);
 const placed = await d.evaluate(() => window.__mr.media().map((m) => ({ how: m.how, t: m.t, along: m.along })));
 if (placed[0]?.how !== 'time') bad.push(`test photo not placed by time: ${JSON.stringify(placed)}`);
+// HEIC: decoded to JPEG for display (heic2any in Chrome), metadata from the original file
+await d.setInputFiles('#file', heicFile); await d.waitForFunction(() => window.__mr.media().length >= 2, null, { timeout: 60000 });
+const heic = await d.evaluate(() => { const m = window.__mr.media().find((x) => x.heic); return m && { decoded: m.decoded, thumb: !!m.thumb, lat: m.lat, lon: m.lon, wall: m.wall }; });
+if (!heic?.decoded || !heic.thumb) bad.push(`HEIC not decoded: ${JSON.stringify(heic)}`);
+if (!(heic?.lat > 38 && heic?.lat < 38.1) || heic?.wall?.date !== '2019-10-20') bad.push(`HEIC metadata not read: ${JSON.stringify(heic)}`);
+await d.evaluate(() => { const li = [...document.querySelectorAll('#media-list li')].find((l) => /heic/i.test(l.textContent)); li?.click(); }); await sleep(800);
+const heicShown = await d.evaluate(() => { const img = document.querySelector('#viewer-body img'); return !!img && img.naturalWidth > 0; });
+if (!heicShown) bad.push('HEIC not shown in the viewer'); else await d.screenshot({ path: `${out}/09-desktop-heic-viewer.png` });
+await d.click('#viewer-close');
+await d.setInputFiles('#file', extraFiles); await sleep(1500);
+const overlaps = await d.evaluate(() => { const r = [...document.querySelectorAll('#chart .media circle')].map((c) => c.getBoundingClientRect()); let n = 0; for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) if (r[i].left < r[j].right - 1 && r[j].left < r[i].right - 1 && r[i].top < r[j].bottom - 1 && r[j].top < r[i].bottom - 1) n++; return { n, markers: r.length, clusters: document.querySelectorAll('#chart .cluster').length }; });
+if (overlaps.n) bad.push(`chart media markers overlap: ${JSON.stringify(overlaps)}`);
+const cpLabels = await d.evaluate(() => [...document.querySelectorAll('#chart .cp .cplabel')].map((t) => t.textContent));
+if (cpLabels[0] && !/START/.test(cpLabels[0]) || !cpLabels.some((l) => /^CP1/.test(l)) || !cpLabels.some((l) => /SUMMIT/.test(l))) bad.push(`checkpoint codes wrong: ${cpLabels}`);
+await d.evaluate(() => { window.__mr.clock = 11 * 3600 + 5 * 60; }); await sleep(300);
+await d.locator('.bottom').screenshot({ path: `${out}/10-desktop-bottom-panel.png` });
+await d.click('#btn-next'); await sleep(200); await d.click('#btn-back'); await sleep(200);
 await d.click('[data-view="follow"]'); await sleep(2500); await d.screenshot({ path: `${out}/04-desktop-follow-media.png` });
 await d.click('#btn-mono'); await d.click('[data-view="top"]'); await sleep(2200); await d.screenshot({ path: `${out}/05-desktop-top-mono.png` });
 // zh + ms text present
 for (const lg of ['zh', 'ms']) { const p = await open(`desktop-${lg}`, `lang=${lg}&autoplay=0`, { width: 1440, height: 900 }); const h = await p.textContent('.cps h2'); if (!h || /Checkpoints/.test(h)) bad.push(`${lg} not translated (${h})`); if (lg === 'zh') await p.screenshot({ path: `${out}/06-desktop-zh.png` }); }
 // mobile
 const m = await open('mobile', 'lang=en', { width: 390, height: 844 }); await m.screenshot({ path: `${out}/07-mobile-390x844.png` }); await m.screenshot({ path: `${out}/08-mobile-390x844-full.png`, fullPage: true });
+await m.setInputFiles('#file', [`${out}/_test.jpg`, ...extraFiles]); await sleep(1500); await m.locator('.bottom').screenshot({ path: `${out}/10-mobile-bottom-panel.png` });
+for (const lg of ['zh', 'ms']) { const p = await open(`bottom-${lg}`, `lang=${lg}&autoplay=0&t=30`, { width: 1440, height: 900 }); await p.locator('.bottom').screenshot({ path: `${out}/10-desktop-bottom-${lg}.png` }); }
 const overflow = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (overflow > 1) bad.push(`mobile horizontal overflow ${overflow}px`);
 await browser.close();
-console.log(JSON.stringify({ c0, c1, nightShown, after, placed }));
+console.log(JSON.stringify({ c0, c1, nightShown, after, placed, heic, overlaps, cpLabels }));
 console.log(bad.length ? 'BAD\n' + bad.join('\n') : 'smoke OK');
 console.log(errors.length ? errors.join('\n') : 'No console errors or warnings.');
 process.exit(bad.length || errors.length ? 1 : 0);

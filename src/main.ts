@@ -1,7 +1,7 @@
 import './styles.css';
 import { loadAll, buildItinerary, alongAt, timeAtAlong, toActive, fromActive, activeDuration, trailAt, nearestAlong, toLocal, type Loaded } from './data';
 import { TerrainView, type View } from './terrain';
-import { createChart, type ChartMarker } from './chart';
+import { createChart, type ChartCp, type ChartMedia } from './chart';
 import { drawInset } from './inset';
 import { importFiles, disposeMedia, type MediaItem } from './media';
 import { t, setLang, getLang, type Lang } from './i18n';
@@ -30,6 +30,9 @@ const summitT = I.keys.find((k) => k.label === 'summit')!.t;
 const walked = (tt: number) => { const a = alongAt(I, tt); return tt <= summitT ? a : T.trail.length * 2 - a; };
 
 // ---------- text ----------
+/** Short checkpoint code: START, CP1..CPn, SUMMIT. The full name goes in tooltips, the active label and the chapter line. */
+const cpCode = (i: number) => (i === 0 ? t().start : i === CP.length - 1 ? t().summit : `CP${i}`);
+const cpName = (id: string) => t().cp[id as keyof ReturnType<typeof t>['cp']];
 const cpKind = (id: string) => (t().cpKind as Record<string, string>)[id] ?? t().cpKind.shelter;
 function applyText() {
   const D = t();
@@ -39,9 +42,9 @@ function applyText() {
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === getLang()));
   $('#btn-colour').textContent = D.colour; $('#btn-mono').textContent = D.mono;
   $('#sources').innerHTML = D.sources.map((s) => `<li>${s}</li>`).join('');
-  $('#cp-list').innerHTML = CP.map((c) => `<li><button data-cp="${c.id}"><b>${D.cp[c.id as keyof typeof D.cp]}</b><span>${c.ele.toLocaleString('en')} ${D.units.m} · ${(c.along / 1000).toFixed(1)} ${D.units.km}</span><i>${cpKind(c.id)} · ${D.eleSrc[c.eleSrc]}</i></button></li>`).join('');
+  $('#cp-list').innerHTML = CP.map((c) => `<li><button data-cp="${c.id}"><b><em class="code">${cpCode(CP.indexOf(c))}</em> ${D.cp[c.id as keyof typeof D.cp]}</b><span>${c.ele.toLocaleString('en')} ${D.units.m} · ${(c.along / 1000).toFixed(1)} ${D.units.km}</span><i>${cpKind(c.id)} · ${D.eleSrc[c.eleSrc]}</i></button></li>`).join('');
   drawInset($('#inset') as unknown as SVGSVGElement, L.inset, [CP[CP.length - 1].lat, CP[CP.length - 1].lon], { borneo: D.borneo, sabah: D.sabah, kk: D.kk, peak: D.cp.lowspeak });
-  buildLabels(); renderMedia(); setPlaying(playing); refreshChartMarkers();
+  buildLabels(); renderMedia(); setPlaying(playing); refreshChartMarkers(); update();
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang]')) b.onclick = () => { setLang(b.dataset.lang as Lang); applyText(); };
 
@@ -56,7 +59,7 @@ function buildLabels() {
     labels.push({ el, x, z, lift });
   };
   const D = t();
-  for (const c of CP) { const major = ['timpohon', 'labanrata', 'sayat', 'lowspeak'].includes(c.id); if (!major && mobile) continue; add(major ? 'cp major' : 'cp', `<span>${D.cp[c.id as keyof typeof D.cp]}</span>${major ? `<i>${c.ele.toLocaleString('en')} m</i>` : ''}`, c.x, c.z, 60, () => flyToAlong(c.along)); }
+  for (const c of CP) { const major = ['timpohon', 'labanrata', 'sayat', 'lowspeak'].includes(c.id); if (!major && mobile) continue; add(major ? 'cp major' : 'cp', `<span><b class="code">${cpCode(CP.indexOf(c))}</b><em class="full">${D.cp[c.id as keyof typeof D.cp]}</em></span>${major ? `<i>${c.ele.toLocaleString('en')} m</i>` : ''}`, c.x, c.z, 60, () => flyToAlong(c.along)); labels[labels.length - 1].el.title = D.cp[c.id as keyof typeof D.cp]; labels[labels.length - 1].el.dataset.cpid = c.id; }
   const hq = T.places[0]; add('place', `<span>${D.parkhq}</span>`, hq.x, hq.z);
   for (const m of media) if (m.along != null) { const p = trailAt(T, m.along); add('media-pin', m.thumb ? `<img src="${m.thumb}" alt="">` : `<span class="ph">${m.heic ? 'HEIC' : m.kind === 'video' ? '▶' : '◻'}</span>`, p[0], p[1], 120, () => openViewer(m)); }
 }
@@ -72,12 +75,19 @@ function placeLabels() {
 }
 
 // ---------- chart ----------
-const chart = createChart($('#chart') as unknown as SVGSVGElement, L, (along) => { const up = clock <= summitT; clock = timeAtAlong(I, along, !up); update(); });
+const chart = createChart($('#chart') as unknown as SVGSVGElement, L, I, (active) => { clock = fromActive(I, active); nightUntil = 0; showNight(false); update(); });
 function refreshChartMarkers() {
-  const D = t(); const list: ChartMarker[] = CP.filter((c) => !mobile || ['timpohon', 'labanrata', 'sayat', 'lowspeak'].includes(c.id)).map((c) => ({ along: c.along, label: D.cp[c.id as keyof typeof D.cp], kind: 'cp', id: c.id }));
-  for (const m of media) if (m.along != null) list.push({ along: m.along, kind: 'media', id: m.id });
-  chart.setMarkers(list, (m) => { if (m.kind === 'cp') flyToAlong(m.along); else { const it = media.find((x) => x.id === m.id); if (it) { if (it.t != null) clock = it.t; update(); openViewer(it); } } });
+  const list: ChartCp[] = CP.map((c, i) => ({ id: c.id, short: cpCode(i), full: cpName(c.id), t: timeAtAlong(I, c.along) }));
+  const ms: ChartMedia[] = media.filter((m) => m.t != null).map((m) => ({ id: m.id, t: m.t!, kind: m.kind }));
+  chart.set(list, ms, (h) => { if (h.kind === 'cp') flyToAlong(CP.find((c) => c.id === h.id)!.along); else { const it = media.find((x) => x.id === h.ids[0]); clock = h.t; update(); if (it) openViewer(it); } });
 }
+/** Stops for Back / The next: checkpoint arrivals (both ways) and placed media. */
+function stops() { const s = CP.flatMap((c) => [timeAtAlong(I, c.along), timeAtAlong(I, c.along, true)]); for (const m of media) if (m.t != null) s.push(m.t); return [...new Set(s.map(Math.round))].sort((a, b) => a - b); }
+$('#btn-next').onclick = () => { const n = stops().find((s) => s > clock + 30); if (n != null) { clock = n; update(); } };
+$('#btn-back').onclick = () => { const n = stops().reverse().find((s) => s < clock - 30); clock = n ?? I.start; update(); };
+$('#btn-trace').onclick = () => view.setView(view.view === 'follow' ? 'auto' : 'follow');
+/** Active checkpoint: last one passed in the walking direction. */
+function activeCp(along: number) { if (clock <= summitT) { let k = 0; CP.forEach((c, i) => { if (c.along <= along + 1) k = i; }); return k; } let k = CP.length - 1; CP.forEach((c, i) => { if (c.along >= along - 1 && i < k) k = i; }); return k; }
 function flyToAlong(along: number) { clock = timeAtAlong(I, along, clock > summitT); update(); view.setView('follow'); }
 document.addEventListener('click', (e) => { const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-cp]'); if (b) { const c = CP.find((x) => x.id === b.dataset.cp)!; flyToAlong(c.along); } });
 
@@ -89,7 +99,7 @@ scrub.oninput = () => { clock = fromActive(I, (+scrub.value / 1000) * activeDura
 $<HTMLSelectElement>('#speed').onchange = (e) => { speed = +(e.target as HTMLSelectElement).value; };
 $('#loop').onclick = () => { loop = !loop; $('#loop').setAttribute('aria-pressed', String(loop)); };
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.onclick = () => view.setView((b.dataset.view === 'reset' ? 'oblique' : b.dataset.view) as View);
-view.onViewChange = (v) => { for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === v)); };
+view.onViewChange = (v) => { $('#btn-trace').setAttribute('aria-pressed', String(v === 'follow')); for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === v)); };
 view.onViewChange(view.view);
 const setTone = (mono: boolean) => { view.setMono(mono); $('#btn-mono').setAttribute('aria-pressed', String(mono)); $('#btn-colour').setAttribute('aria-pressed', String(!mono)); };
 $('#btn-colour').onclick = () => setTone(false); $('#btn-mono').onclick = () => setTone(true); setTone(params.get('tone') === 'mono');
@@ -109,8 +119,13 @@ function update() {
   $('#v-dist').textContent = `${(walked(clock) / 1000).toFixed(2)} ${D.units.km}`;
   $('#v-elapsed').textContent = fmtDur(toActive(I, clock));
   $('#t-now').textContent = `${D.day} ${day} · ${fmtClock(clock)}`;
+  scrub.style.setProperty('--fill', `${(toActive(I, clock) / activeDuration(I)) * 100}%`);
   if (document.activeElement !== scrub) scrub.value = String(Math.round((toActive(I, clock) / activeDuration(I)) * 1000));
-  chart.setPosition(a, clock <= summitT ? a : T.trail.length);
+  const ci = activeCp(a); const cid = CP[ci].id;
+  chart.setPosition(toActive(I, clock), cid);
+  $('#chapter').textContent = `${cpCode(ci)} · ${cpName(cid)}`; $('#chapter').title = `${cpName(cid)} · ${cpKind(cid)}`;
+  $('#ch-prog').textContent = `${Math.round((toActive(I, clock) / activeDuration(I)) * 100)}% · ${Math.round(p[2]).toLocaleString('en')} ${D.units.m}`;
+  for (const l of labels) if (l.el.dataset.cpid) l.el.classList.toggle('active', l.el.dataset.cpid === cid);
   const ll = { lat: CP[0].lat, lon: CP[0].lon }; void ll;
 }
 

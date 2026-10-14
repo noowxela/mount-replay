@@ -4,7 +4,8 @@ import exifr from 'exifr';
 
 export interface MediaItem {
   id: string; file: File; name: string; kind: 'image' | 'video'; heic: boolean;
-  url: string; thumb: string | null;          // object URLs (revoked on remove)
+  url: string; thumb: string | null;          // object URLs (revoked on remove); for HEIC, url is the decoded JPEG
+  decoded: boolean;                            // HEIC/HEIF decoded to JPEG in the browser (heic2any)
   lat: number | null; lon: number | null;      // from GPS metadata
   wall: { date: string; secs: number } | null; // camera wall-clock time: YYYY-MM-DD + seconds of day
   utc: boolean;                                // wall clock derived from a UTC timestamp (video), shown in UTC+8
@@ -52,12 +53,21 @@ async function thumbnail(item: MediaItem): Promise<string | null> {
     return new Promise<string | null>((res) => canvas.toBlob((bl) => res(bl ? URL.createObjectURL(bl) : null), 'image/jpeg', 0.8));
   };
   try {
-    if (item.kind === 'image') { const bmp = await createImageBitmap(item.file); const r = await draw(bmp, bmp.width, bmp.height); bmp.close(); return r; }
+    if (item.kind === 'image') { const src = item.decoded ? await fetch(item.url).then((r) => r.blob()) : item.file; const bmp = await createImageBitmap(src); const r = await draw(bmp, bmp.width, bmp.height); bmp.close(); return r; }
     const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'metadata'; v.src = item.url;
     await new Promise<void>((res, rej) => { v.onloadeddata = () => res(); v.onerror = () => rej(new Error('video')); setTimeout(() => rej(new Error('timeout')), 8000); });
     v.currentTime = Math.min(0.5, (v.duration || 1) / 2); await new Promise<void>((res) => { v.onseeked = () => res(); setTimeout(res, 2000); });
     return await draw(v, v.videoWidth, v.videoHeight);
   } catch { return null; } // e.g. HEIC in a browser without HEIC decoding: a placeholder is shown
+}
+
+/** HEIC/HEIF -> JPEG blob. Uses the browser's own decoder when it has one (Safari), else heic2any (libheif, WASM),
+ *  loaded on demand so it does not weigh on the first paint. Metadata is always read from the ORIGINAL file. */
+async function decodeHeic(file: File): Promise<Blob | null> {
+  try { const bmp = await createImageBitmap(file); const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d')!.drawImage(bmp, 0, 0); bmp.close();
+    const b = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', 0.9)); if (b) return b; } catch { /* no native HEIC decoding */ }
+  try { const { default: heic2any } = await import('heic2any'); const r = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 }); return Array.isArray(r) ? r[0] : r; }
+  catch (e) { console.info('HEIC decode failed', e); return null; }
 }
 
 let seq = 0;
@@ -68,7 +78,7 @@ export async function importFiles(files: FileList | File[]): Promise<MediaItem[]
     const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|heic|heif|webp)$/i.test(file.name);
     if (!isVideo && !isImage) continue;
     const item: MediaItem = { id: `m${++seq}`, file, name: file.name, kind: isVideo ? 'video' : 'image', heic: /\.(heic|heif)$/i.test(file.name) || /hei[cf]/.test(file.type),
-      url: URL.createObjectURL(file), thumb: null, lat: null, lon: null, wall: null, utc: false, along: null, t: null, how: 'none' };
+      url: URL.createObjectURL(file), thumb: null, decoded: false, lat: null, lon: null, wall: null, utc: false, along: null, t: null, how: 'none' };
     try {
       if (isImage) {
         const tags = await exifr.parse(file, { reviveValues: false, pick: ['DateTimeOriginal', 'CreateDate', 'DateTimeDigitized'] }).catch(() => null);
@@ -82,6 +92,7 @@ export async function importFiles(files: FileList | File[]): Promise<MediaItem[]
       }
     } catch { /* unreadable metadata: the item stays unplaced */ }
     if (!item.wall && file.lastModified) { /* no capture time in the file: leave unplaced rather than guess from the file date */ }
+    if (item.heic) { const jpg = await decodeHeic(file); if (jpg) { URL.revokeObjectURL(item.url); item.url = URL.createObjectURL(jpg); item.decoded = true; } }
     item.thumb = await thumbnail(item);
     out.push(item);
   }
