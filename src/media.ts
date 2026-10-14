@@ -71,12 +71,16 @@ async function decodeHeic(file: File): Promise<Blob | null> {
 }
 
 let seq = 0;
-export async function importFiles(files: FileList | File[]): Promise<MediaItem[]> {
+export type Stage = 'queued' | 'reading' | 'converting' | 'thumb' | 'done' | 'unsupported' | 'error';
+/** Imports files one by one, reporting each stage so the UI can show a pending row per file. */
+export async function importFiles(files: FileList | File[], onStage: (i: number, stage: Stage, item?: MediaItem) => void = () => {}): Promise<MediaItem[]> {
   const out: MediaItem[] = [];
-  for (const file of Array.from(files)) {
+  for (const [i, file] of Array.from(files).entries()) {
+   try {
     const isVideo = file.type.startsWith('video/') || /\.(mov|mp4|m4v)$/i.test(file.name);
     const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|heic|heif|webp)$/i.test(file.name);
-    if (!isVideo && !isImage) continue;
+    if (!isVideo && !isImage) { onStage(i, 'unsupported'); continue; }
+    onStage(i, 'reading');
     const item: MediaItem = { id: `m${++seq}`, file, name: file.name, kind: isVideo ? 'video' : 'image', heic: /\.(heic|heif)$/i.test(file.name) || /hei[cf]/.test(file.type),
       url: URL.createObjectURL(file), thumb: null, decoded: false, lat: null, lon: null, wall: null, utc: false, along: null, t: null, how: 'none' };
     try {
@@ -92,9 +96,10 @@ export async function importFiles(files: FileList | File[]): Promise<MediaItem[]
       }
     } catch { /* unreadable metadata: the item stays unplaced */ }
     if (!item.wall && file.lastModified) { /* no capture time in the file: leave unplaced rather than guess from the file date */ }
-    if (item.heic) { const jpg = await decodeHeic(file); if (jpg) { URL.revokeObjectURL(item.url); item.url = URL.createObjectURL(jpg); item.decoded = true; } }
-    item.thumb = await thumbnail(item);
-    out.push(item);
+    if (item.heic) { onStage(i, 'converting'); await new Promise((r) => setTimeout(r, 0)); const jpg = await decodeHeic(file); if (jpg) { URL.revokeObjectURL(item.url); item.url = URL.createObjectURL(jpg); item.decoded = true; } }
+    onStage(i, 'thumb'); item.thumb = await thumbnail(item);
+    out.push(item); onStage(i, 'done', item);
+   } catch (e) { console.info('import failed', file.name, e); onStage(i, 'error'); }
   }
   return out;
 }

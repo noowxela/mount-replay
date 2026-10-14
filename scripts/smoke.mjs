@@ -45,7 +45,14 @@ await d.setInputFiles('#file', `${out}/_test.jpg`); await sleep(1500);
 const placed = await d.evaluate(() => window.__mr.media().map((m) => ({ how: m.how, t: m.t, along: m.along })));
 if (placed[0]?.how !== 'time') bad.push(`test photo not placed by time: ${JSON.stringify(placed)}`);
 // HEIC: decoded to JPEG for display (heic2any in Chrome), metadata from the original file
-await d.setInputFiles('#file', heicFile); await d.waitForFunction(() => window.__mr.media().length >= 2, null, { timeout: 60000 });
+await d.setInputFiles('#file', heicFile);
+// loading state: a pending row with a spinner/shimmer and stage text, plus the overall indicator, before the swap
+const loading = await d.waitForFunction(() => { const li = document.querySelector('#media-list li.pending'); const pr = document.getElementById('media-progress');
+  return li && li.querySelector('.shimmer') && /HEIC/i.test(li.textContent) && /Converting HEIC/.test(li.textContent) && !pr.classList.contains('hidden') && /Processing 1 of 1/.test(pr.textContent) ? li.textContent : null; }, null, { timeout: 20000, polling: 50 }).then((h) => h.jsonValue()).catch(() => null);
+if (!loading) bad.push('HEIC loading state not shown'); else { await d.locator('.panel.media').scrollIntoViewIfNeeded(); await d.locator('.panel.media').screenshot({ path: `${out}/11-upload-loading.png` }); }
+await d.waitForFunction(() => window.__mr.media().length >= 2, null, { timeout: 60000 });
+const loadingGone = await d.evaluate(() => !document.querySelector('#media-list li.pending') && document.getElementById('media-progress').classList.contains('hidden'));
+if (!loadingGone) bad.push('loading state not cleared after import');
 const heic = await d.evaluate(() => { const m = window.__mr.media().find((x) => x.heic); return m && { decoded: m.decoded, thumb: !!m.thumb, lat: m.lat, lon: m.lon, wall: m.wall }; });
 if (!heic?.decoded || !heic.thumb) bad.push(`HEIC not decoded: ${JSON.stringify(heic)}`);
 if (!(heic?.lat > 38 && heic?.lat < 38.1) || heic?.wall?.date !== '2019-10-20') bad.push(`HEIC metadata not read: ${JSON.stringify(heic)}`);
@@ -71,7 +78,7 @@ await m.setInputFiles('#file', [`${out}/_test.jpg`, ...extraFiles]); await sleep
 for (const lg of ['zh', 'ms']) { const p = await open(`bottom-${lg}`, `lang=${lg}&autoplay=0&t=30`, { width: 1440, height: 900 }); await p.locator('.bottom').screenshot({ path: `${out}/10-desktop-bottom-${lg}.png` }); }
 const overflow = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (overflow > 1) bad.push(`mobile horizontal overflow ${overflow}px`);
 await browser.close();
-console.log(JSON.stringify({ c0, c1, nightShown, after, placed, heic, overlaps, cpLabels }));
+console.log(JSON.stringify({ c0, c1, nightShown, after, placed, loading, heic, overlaps, cpLabels }));
 console.log(bad.length ? 'BAD\n' + bad.join('\n') : 'smoke OK');
 console.log(errors.length ? errors.join('\n') : 'No console errors or warnings.');
 process.exit(bad.length || errors.length ? 1 : 0);

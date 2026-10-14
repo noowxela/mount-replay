@@ -3,7 +3,7 @@ import { loadAll, buildItinerary, alongAt, timeAtAlong, toActive, fromActive, ac
 import { TerrainView, type View } from './terrain';
 import { createChart, type ChartCp, type ChartMedia } from './chart';
 import { drawInset } from './inset';
-import { importFiles, disposeMedia, type MediaItem } from './media';
+import { importFiles, disposeMedia, type MediaItem, type Stage } from './media';
 import { t, setLang, getLang, type Lang } from './i18n';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector(s) as T;
@@ -44,7 +44,7 @@ function applyText() {
   $('#sources').innerHTML = D.sources.map((s) => `<li>${s}</li>`).join('');
   $('#cp-list').innerHTML = CP.map((c) => `<li><button data-cp="${c.id}"><b><em class="code">${cpCode(CP.indexOf(c))}</em> ${D.cp[c.id as keyof typeof D.cp]}</b><span>${c.ele.toLocaleString('en')} ${D.units.m} · ${(c.along / 1000).toFixed(1)} ${D.units.km}</span><i>${cpKind(c.id)} · ${D.eleSrc[c.eleSrc]}</i></button></li>`).join('');
   drawInset($('#inset') as unknown as SVGSVGElement, L.inset, [CP[CP.length - 1].lat, CP[CP.length - 1].lon], { borneo: D.borneo, sabah: D.sabah, kk: D.kk, peak: D.cp.lowspeak });
-  buildLabels(); renderMedia(); setPlaying(playing); refreshChartMarkers(); update();
+  buildLabels(); renderMedia(); renderProgress(); setPlaying(playing); refreshChartMarkers(); update();
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang]')) b.onclick = () => { setLang(b.dataset.lang as Lang); applyText(); };
 
@@ -131,9 +131,26 @@ function update() {
 
 // ---------- media ----------
 const fileIn = $<HTMLInputElement>('#file'); const day1In = $<HTMLInputElement>('#day1'); const offIn = $<HTMLInputElement>('#offset');
-fileIn.onchange = async () => { if (!fileIn.files?.length) return; const added = await importFiles(fileIn.files); media.push(...added); fileIn.value = '';
-  if (!day1In.value) { const dates = media.map((m) => m.wall?.date).filter(Boolean).sort() as string[]; if (dates.length) day1In.value = dates[0]; }
-  placeMedia(); };
+/** Files being imported: one pending row each (spinner + stage text), then swapped for the real item or left as an error. */
+interface Pending { key: string; name: string; stage: Stage }
+let pending: Pending[] = []; let batch = { done: 0, total: 0 };
+fileIn.onchange = async () => { if (!fileIn.files?.length) return;
+  const files = Array.from(fileIn.files); fileIn.value = ''; const tag = Math.random().toString(36).slice(2, 7);
+  const rows: Pending[] = files.map((f, i) => ({ key: `${tag}-${i}`, name: f.name, stage: 'queued' }));
+  pending.push(...rows); batch = { done: batch.total > batch.done ? batch.done : 0, total: (batch.total > batch.done ? batch.total : 0) + files.length }; renderMedia(); renderProgress();
+  await importFiles(files, (i, stage, item) => {
+    const r = rows[i]; r.stage = stage;
+    if (stage === 'done' || stage === 'error' || stage === 'unsupported') batch.done++;
+    if (stage === 'done' && item) { pending = pending.filter((p) => p !== r); media.push(item);
+      if (!day1In.value) { const dates = media.map((m) => m.wall?.date).filter(Boolean).sort() as string[]; if (dates.length) day1In.value = dates[0]; }
+      placeMedia(); } else renderMedia();
+    renderProgress();
+  });
+  renderProgress(); };
+function renderProgress() {
+  const el = $('#media-progress'); const D = t(); const busy = batch.done < batch.total;
+  el.classList.toggle('hidden', !busy); el.innerHTML = busy ? `<span class="spin" aria-hidden="true"></span>${D.processing.replace('{n}', String(Math.min(batch.total, batch.done + 1))).replace('{total}', String(batch.total))}` : '';
+}
 day1In.onchange = offIn.onchange = () => placeMedia();
 function placeMedia() {
   const day1 = day1In.value ? Date.parse(day1In.value + 'T00:00:00Z') : NaN; const off = +offIn.value || 0;
@@ -152,9 +169,12 @@ function placeMedia() {
 }
 function renderMedia() {
   const D = t(); const ul = $('#media-list');
-  if (!media.length) { ul.innerHTML = `<li class="empty">${D.mediaNone}</li>`; return; }
+  const pend = pending.map((p) => { const err = p.stage === 'error' || p.stage === 'unsupported';
+    return `<li class="pending${err ? ' failed' : ''}" data-p="${p.key}"><span class="th">${err ? '<span class="ph err">!</span>' : '<span class="shimmer"></span>'}</span><span class="mi"><b>${p.name}</b><i>${err ? '' : '<span class="spin" aria-hidden="true"></span>'}${(D.stage as Record<string, string>)[p.stage]}</i></span>${err ? '<button class="rm" aria-label="remove">×</button>' : '<span></span>'}</li>`; }).join('');
+  if (!media.length && !pending.length) { ul.innerHTML = `<li class="empty">${D.mediaNone}</li>`; return; }
   const how = { gps: D.placedGps, time: D.placedTime, none: D.unplaced, outside: D.outside };
-  ul.innerHTML = media.map((m) => `<li data-m="${m.id}" class="${m.how}"><span class="th">${m.thumb ? `<img src="${m.thumb}" alt="">` : `<span class="ph">${m.heic ? 'HEIC' : m.kind === 'video' ? '▶' : '◻'}</span>`}</span><span class="mi"><b>${m.name}</b><i>${how[m.how]}${m.t != null ? ` · ${D.day} ${m.t >= 86400 ? 2 : 1} ${fmtClock(m.t)}` : ''}${m.heic && !m.thumb ? ` · ${D.heicNote}` : ''}</i></span><button class="rm" aria-label="remove">×</button></li>`).join('');
+  ul.innerHTML = pend + media.map((m) => `<li data-m="${m.id}" class="${m.how}"><span class="th">${m.thumb ? `<img src="${m.thumb}" alt="">` : `<span class="ph">${m.heic ? 'HEIC' : m.kind === 'video' ? '▶' : '◻'}</span>`}</span><span class="mi"><b>${m.name}</b><i>${how[m.how]}${m.t != null ? ` · ${D.day} ${m.t >= 86400 ? 2 : 1} ${fmtClock(m.t)}` : ''}${m.heic && !m.thumb ? ` · ${D.heicNote}` : ''}</i></span><button class="rm" aria-label="remove">×</button></li>`).join('');
+  for (const li of ul.querySelectorAll<HTMLElement>('li[data-p]')) li.querySelector('.rm')?.addEventListener('click', (e) => { e.stopPropagation(); pending = pending.filter((p) => p.key !== li.dataset.p); renderMedia(); });
   for (const li of ul.querySelectorAll<HTMLElement>('li[data-m]')) {
     const m = media.find((x) => x.id === li.dataset.m)!;
     li.querySelector('.rm')!.addEventListener('click', (e) => { e.stopPropagation(); disposeMedia(m); media = media.filter((x) => x !== m); renderMedia(); buildLabels(); refreshChartMarkers(); });
@@ -192,4 +212,4 @@ setLang(getLang()); applyText(); update();
 if (params.get('view')) view.setView(params.get('view') as View, true);
 else if (!reduced) view.setView('auto');
 requestAnimationFrame(frame);
-(window as unknown as { __mr: unknown }).__mr = { view, I, get clock() { return clock; }, set clock(v: number) { clock = v; update(); }, media: () => media, ready: true };
+(window as unknown as { __mr: unknown }).__mr = { view, I, get clock() { return clock; }, set clock(v: number) { clock = v; update(); }, media: () => media, pending: () => pending, ready: true };

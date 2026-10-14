@@ -90,3 +90,10 @@ h2 .num { color: var(--acc); } .badge { margin-left: auto; border: 1px dashed va
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 .views button[aria-pressed="true"], .tone button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.media-progress { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--acc); font-size: 12px; }
+.spin { display: inline-block; width: 10px; height: 10px; border: 1.5px solid rgba(255,138,61,.3); border-top-color: var(--acc); border-radius: 50%; animation: spin .8s linear infinite; margin-right: 6px; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.shimmer { display: block; width: 100%; height: 100%; background: linear-gradient(100deg, #15191b 30%, #2a2018 50%, #15191b 70%) 0 0 / 250% 100%; animation: shimmer 1.2s linear infinite; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+#media-list li.pending { cursor: default; } #media-list li.pending i { color: var(--acc); font-family: var(--mono); } #media-list li.pending b { color: var(--mute); }
+#media-list li.failed i { color: #e0664a; } #media-list li.failed .th { border: 1px solid #e0664a; } .ph.err { color: #e0664a; font: 600 16px var(--mono); }

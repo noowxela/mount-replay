@@ -3,6 +3,7 @@ export type Lang = 'en' | 'zh' | 'ms';
 const en = {
   title: 'Mount Kinabalu', subtitle: 'Hike replay', tagline: 'Timpohon Gate to Low\'s Peak, 4,095 m',
   start: 'START', summit: 'SUMMIT', back: 'Back', next: 'The next', trace: 'Trace', stopsHint: 'Step through checkpoints and your photos in order',
+  processing: 'Processing {n} of {total}…', stage: { queued: 'Waiting…', reading: 'Reading location & time…', converting: 'Converting HEIC…', thumb: 'Making thumbnail…', done: 'Done', unsupported: 'Not a photo or video', error: 'Could not read this file' },
   play: 'Play', pause: 'Pause', again: 'Replay', loop: 'Loop', speed: 'Speed',
   views: { auto: 'Auto', follow: 'Follow', oblique: 'Oblique', top: 'Top', reset: 'Reset' },
   colour: 'Colour', mono: 'Mono',
@@ -32,6 +33,7 @@ type Dict = typeof en;
 const zh: Dict = {
   title: '京那巴鲁山', subtitle: '登山回放', tagline: '廷波洪门至罗氏峰，4,095 米',
   start: '起点', summit: '山顶', back: '上一个', next: '下一个', trace: '跟踪', stopsHint: '按顺序逐个查看检查点与照片',
+  processing: '正在处理第 {n} 个，共 {total} 个…', stage: { queued: '等待中…', reading: '正在读取位置与时间…', converting: '正在转换 HEIC…', thumb: '正在生成缩略图…', done: '完成', unsupported: '不是照片或视频', error: '无法读取此文件' },
   play: '播放', pause: '暂停', again: '重播', loop: '循环', speed: '速度',
   views: { auto: '自动', follow: '跟随', oblique: '斜视', top: '俯视', reset: '重置' },
   colour: '彩色', mono: '单色',
@@ -60,6 +62,7 @@ const zh: Dict = {
 const ms: Dict = {
   title: 'Gunung Kinabalu', subtitle: 'Ulang tayang pendakian', tagline: 'Pintu Timpohon ke Puncak Low, 4,095 m',
   start: 'MULA', summit: 'PUNCAK', back: 'Kembali', next: 'Seterusnya', trace: 'Jejak', stopsHint: 'Langkah melalui pusat pemeriksaan dan foto anda mengikut urutan',
+  processing: 'Memproses {n} daripada {total}…', stage: { queued: 'Menunggu…', reading: 'Membaca lokasi & masa…', converting: 'Menukar HEIC…', thumb: 'Membuat imej kecil…', done: 'Selesai', unsupported: 'Bukan foto atau video', error: 'Fail ini tidak dapat dibaca' },
   play: 'Main', pause: 'Jeda', again: 'Main semula', loop: 'Ulang', speed: 'Kelajuan',
   views: { auto: 'Auto', follow: 'Ikut', oblique: 'Serong', top: 'Atas', reset: 'Set semula' },
   colour: 'Warna', mono: 'Mono',
