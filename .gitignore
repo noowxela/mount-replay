@@ -2,3 +2,15 @@ node_modules
 dist
 shots
 .DS_Store
+# local caches and logs
+.vite/
+*.log
+.env
+.env.*
+# raw inputs for scripts/bake.py (large; re-download, see README)
+*.tif
+*.tiff
+osm.json
+ne_land_10m.json
+scripts/out/
+out/
