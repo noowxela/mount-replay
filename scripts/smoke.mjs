@@ -38,6 +38,7 @@ writeFileSync(`${out}/_ontrail.jpg`, gpsJpeg('2024:05:11 13:05:00', 6.0589492, 1
 const extra = ['2024:05:11 08:20:00', '2024:05:11 10:15:00', '2024:05:11 10:16:00', '2024:05:11 10:17:30', '2024:05:11 11:30:00', '2024:05:11 12:40:00', '2024:05:12 04:10:00', '2024:05:12 05:40:00', '2024:05:12 05:44:00', '2024:05:12 07:30:00', '2024:05:12 12:00:00'];
 const extraFiles = extra.map((w, i) => { const f = `${out}/_p${i}.jpg`; writeFileSync(f, exifJpeg(w)); return f; });
 const heicFile = new URL('./fixtures/heic-iphone7.heic', import.meta.url).pathname; // iPhone 7 HEIC with GPS + time (exifr test fixture, MIT)
+const openTabs = (p) => p.evaluate(() => { for (const id of ['aside-tab', 'bottom-tab']) { const b = document.getElementById(id); if (b?.getAttribute('aria-expanded') === 'false') b.click(); } });
 async function open(name, q, vp) {
   const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: vp.width < 500 ? 3 : 1, isMobile: vp.width < 500, hasTouch: vp.width < 500 });
   const p = await ctx.newPage();
@@ -46,7 +47,9 @@ async function open(name, q, vp) {
   p.on('requestfailed', (r) => errors.push(`[${name}] requestfailed: ${r.url()} ${r.failure()?.errorText}`));
   p.on('response', (r) => { if (r.status() >= 400) errors.push(`[${name}] HTTP ${r.status()}: ${r.url()}`); });
   await p.goto(`${base}?${q}`, { waitUntil: 'networkidle', timeout: 120000 });
-  await p.waitForFunction(() => window.__mr?.ready, null, { timeout: 60000 }); await sleep(2500); return p;
+  await p.waitForFunction(() => window.__mr?.ready, null, { timeout: 60000 });
+  // the aside (SDD 002) and the chart (SDD 003) start closed: open both so the panels and the chart can be checked
+  await openTabs(p); await sleep(2500); return p;
 }
 // desktop EN: replay runs, night card, views, media
 const d = await open('desktop-en', 'lang=en', { width: 1600, height: 900 });
@@ -108,12 +111,12 @@ await d.click('[data-view="follow"]'); await sleep(2500); await d.screenshot({ p
 await d.click('#btn-mono'); await d.click('[data-view="top"]'); await sleep(2200); await d.screenshot({ path: `${out}/05-desktop-top-mono.png` });
 // persistence: reload keeps the photos (restored from IndexedDB), Clear my photos empties it
 const nBefore = await d.evaluate(() => window.__mr.media().length);
-await d.reload({ waitUntil: 'networkidle' }); await d.waitForFunction(() => window.__mr?.ready);
+await d.reload({ waitUntil: 'networkidle' }); await d.waitForFunction(() => window.__mr?.ready); await openTabs(d);
 const sawRestoring = await d.waitForFunction(() => window.__mr.pending().some((p) => p.stage === 'restoring') || window.__mr.media().length > 0, null, { timeout: 20000, polling: 10 }).then(() => true).catch(() => false);
 await d.waitForFunction((n) => window.__mr.media().length >= n, nBefore, { timeout: 30000 }).catch(() => {});
 const restored = await d.evaluate(() => ({ n: window.__mr.media().length, thumbs: window.__mr.media().filter((m) => m.thumb).length, heic: window.__mr.media().find((m) => m.heic)?.decoded, onTrail: window.__mr.media().find((m) => m.name === '_ontrail.jpg')?.how }));
 if (!sawRestoring || restored.n !== nBefore || restored.onTrail !== 'gps' || !restored.heic) bad.push(`persistence restore failed: ${JSON.stringify({ nBefore, restored })}`);
-await d.click('#clear-media'); await sleep(300); await d.reload({ waitUntil: 'networkidle' }); await d.waitForFunction(() => window.__mr?.ready); await sleep(800);
+await d.click('#clear-media'); await sleep(300); await d.reload({ waitUntil: 'networkidle' }); await d.waitForFunction(() => window.__mr?.ready); await openTabs(d); await sleep(800);
 const afterClear = await d.evaluate(() => window.__mr.media().length); if (afterClear !== 0) bad.push(`clear my photos failed: ${afterClear} left`);
 // no GPS, real climb on other dates: matched by time of day (day 1 anchored to the photos), 07:00 is inside the margin
 const a = await open('anchor', 'lang=en&autoplay=0', { width: 1440, height: 900 });
