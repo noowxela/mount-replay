@@ -10,6 +10,7 @@ export function drawInset(svg: SVGSVGElement, I: Inset, peak: [number, number], 
     <text class="lbl big" x="${X(113.6)}" y="${Y(0.8)}">${labels.borneo}</text>
     <text class="lbl" x="${X(117.0)}" y="${Y(5.0)}">${labels.sabah}</text>
     <circle class="kk" cx="${X(kk[1])}" cy="${Y(kk[0])}" r="2.2"/><text class="lbl sm" x="${X(kk[1]) - 4}" y="${Y(kk[0]) + 10}" text-anchor="end">${labels.kk}</text>
+    <rect class="frame" x="${(X(plon - 0.9)).toFixed(1)}" y="${(Y(plat + 0.75)).toFixed(1)}" width="${(X(plon + 0.9) - X(plon - 0.9)).toFixed(1)}" height="${(Y(plat - 0.75) - Y(plat + 0.75)).toFixed(1)}"/>
     <circle class="pk-pulse" cx="${X(plon)}" cy="${Y(plat)}" r="7"/><circle class="pk" cx="${X(plon)}" cy="${Y(plat)}" r="3.2"/>
     <text class="lbl pkl" x="${X(plon) + 7}" y="${Y(plat) - 6}">${labels.peak}</text>`;
 }

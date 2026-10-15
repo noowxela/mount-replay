@@ -7,7 +7,7 @@ const NS = 'http://www.w3.org/2000/svg';
 const TICK_M = 100; const LABEL_STEPS = [100, 200, 500, 1000];
 export interface ChartCp { id: string; short: string; full: string; t: number }
 export interface ChartMedia { id: string; t: number; kind: 'image' | 'video' }
-export type ChartHit = { kind: 'cp'; id: string; t: number } | { kind: 'media'; ids: string[]; t: number };
+export type ChartHit = { kind: 'cp'; id: string; t: number } | { kind: 'media'; ids: string[]; t: number; x?: number; y?: number };
 const fmt = (s: number) => { const d = ((s % 86400) + 86400) % 86400; return `${String(Math.floor(d / 3600)).padStart(2, '0')}:${String(Math.floor(d / 60) % 60).padStart(2, '0')}`; };
 
 export function createChart(svg: SVGSVGElement, L: Loaded, I: Itinerary, onScrub: (active: number) => void) {
@@ -78,7 +78,10 @@ export function createChart(svg: SVGSVGElement, L: Loaded, I: Itinerary, onScrub
       else if (c.items[0].kind === 'video') el('path', { d: 'M-2.5,-4L4,0L-2.5,4Z', class: 'mico' }, g);
       else { el('rect', { x: -4, y: -3.2, width: 8, height: 6.4, rx: 1, class: 'mico-o' }, g); el('path', { d: 'M-3,2.2L-0.8,-0.6L0.8,1L2,0L3,2.2Z', class: 'mico' }, g); }
       g.addEventListener('pointerdown', (e) => e.stopPropagation());
-      g.addEventListener('click', () => onHit({ kind: 'media', ids: c.items.map((m) => m.id), t: c.items[0].t }));
+      g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button'); if (c.items.length > 1) g.setAttribute('aria-expanded', 'false');
+      g.setAttribute('aria-label', c.items.length > 1 ? `${c.items.length} photos near ${fmt(c.items[0].t)}` : `${c.items[0].kind} ${fmt(c.items[0].t)}`);
+      const fire = () => onHit({ kind: 'media', ids: c.items.map((m) => m.id), t: c.items[0].t, x: c.x, y: cy });
+      g.addEventListener('click', fire); g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fire(); } });
     }
     cursor = el('line', { y1: pad.t - 6, y2: H - pad.b, class: 'cursor' }); dot = el('circle', { r: 4, class: 'cdot' });
     apply();

@@ -19,10 +19,10 @@ const en = {
   media: 'Your photos', addMedia: 'Add photos / videos', mediaNote: 'Files stay on this device: nothing is uploaded. They are kept in this browser until you clear them.',
   mediaDay1: 'Day 1 date', mediaOffset: 'Camera clock offset (h)', mediaNone: 'No photos yet.',
   placedGps: 'GPS: snapped to the trail', placedTime: 'Time only: placed on the typical timeline', unplaced: 'No location or time — not placed', unplacedTime: 'No location; time outside the climb — not placed', noGpsHint: '{n} photo(s) have no location. On iPhone, tap Options in the photo picker and turn on Location (or share the originals via Files / AirDrop). Without GPS, photos are placed by time of day.', offTrail: 'Outside the trail — not placed',
-  heicNote: 'HEIC: metadata read; the image could not be decoded', close: 'Close',
+  heicNote: 'HEIC: metadata read; the image could not be decoded', close: 'Close', autoReplay: 'AUTO REPLAY', pausedStatus: 'PAUSED', legendRoute: 'Full trail', legendDone: 'Walked', legendNow: 'Now', stepStatus: 'Stop {n} / {total}', viewerTitle: 'Your photo', pickerTitle: '{n} photos near {time}', scanAlt: 'Scan {h} m', keysHint: 'Space play · ←/→ seek · , . stops',
   units: { m: 'm', km: 'km' },
   sources: [
-    'Terrain: Copernicus GLO-30 DEM, © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA. Heights exaggerated 1.6×.',
+    'Terrain: Copernicus GLO-30 DEM, © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA. Heights exaggerated 1.6× (vertical only).',
     'Trail, checkpoints and peaks: © OpenStreetMap contributors (ODbL).',
     'Heights of Timpohon Gate (1,866 m), Laban Rata (3,270 m) and Low\'s Peak (4,095 m), and walking times: Wikipedia, "Mount Kinabalu" (fetched 2026-10-14). Shelter heights: OSM ele tags.',
     'Borneo outline: Natural Earth (public domain).',
@@ -50,7 +50,7 @@ const zh: Dict = {
   media: '您的照片', addMedia: '添加照片／视频', mediaNote: '文件只留在本设备上，不会上传；会保存在此浏览器中，直到您清除。',
   mediaDay1: '第 1 天日期', mediaOffset: '相机时钟偏差（小时）', mediaNone: '还没有照片。',
   placedGps: 'GPS：已对齐到步道', placedTime: '仅有时间：按典型时间线放置', unplaced: '无位置或时间 — 未放置', unplacedTime: '无位置；时间不在登山期间 — 未放置', noGpsHint: '{n} 张照片没有位置信息。在 iPhone 上，请在照片选择器中点“选项”并打开“位置”（或通过“文件”/隔空投送分享原图）。没有 GPS 时，照片按拍摄时刻放置。', offTrail: '不在步道范围内 — 未放置',
-  heicNote: 'HEIC：已读取元数据；无法解码图像', close: '关闭',
+  heicNote: 'HEIC：已读取元数据；无法解码图像', close: '关闭', autoReplay: '自动回放', pausedStatus: '已暂停', legendRoute: '全程路线', legendDone: '已走过', legendNow: '当前位置', stepStatus: '第 {n} / {total} 站', viewerTitle: '你的照片', pickerTitle: '{time} 附近 {n} 张照片', scanAlt: '扫描 {h} 米', keysHint: '空格 播放 · ←/→ 快进退 · , . 切换站点',
   units: { m: '米', km: '公里' },
   sources: [
     '地形：Copernicus GLO-30 DEM，© DLR e.V. 2010-2014 及 © Airbus Defence and Space GmbH 2014-2018，由欧盟与欧洲航天局依 COPERNICUS 提供。高度夸大 1.6 倍。',
@@ -80,7 +80,7 @@ const ms: Dict = {
   media: 'Foto anda', addMedia: 'Tambah foto / video', mediaNote: 'Fail kekal pada peranti ini: tiada yang dimuat naik. Ia disimpan dalam pelayar ini sehingga anda memadamnya.',
   mediaDay1: 'Tarikh hari 1', mediaOffset: 'Ofset jam kamera (j)', mediaNone: 'Belum ada foto.',
   placedGps: 'GPS: dilekatkan pada denai', placedTime: 'Masa sahaja: diletakkan pada garis masa biasa', unplaced: 'Tiada lokasi atau masa — tidak diletakkan', unplacedTime: 'Tiada lokasi; masa di luar pendakian — tidak diletakkan', noGpsHint: '{n} foto tiada lokasi. Pada iPhone, ketik Pilihan dalam pemilih foto dan hidupkan Lokasi (atau kongsi fail asal melalui Fail / AirDrop). Tanpa GPS, foto diletakkan mengikut waktu.', offTrail: 'Di luar denai — tidak diletakkan',
-  heicNote: 'HEIC: metadata dibaca; imej tidak dapat dinyahkod', close: 'Tutup',
+  heicNote: 'HEIC: metadata dibaca; imej tidak dapat dinyahkod', close: 'Tutup', autoReplay: 'MAIN AUTO', pausedStatus: 'DIJEDA', legendRoute: 'Seluruh denai', legendDone: 'Sudah dilalui', legendNow: 'Kini', stepStatus: 'Hentian {n} / {total}', viewerTitle: 'Foto anda', pickerTitle: '{n} foto sekitar {time}', scanAlt: 'Imbasan {h} m', keysHint: 'Space main · ←/→ cari · , . hentian',
   units: { m: 'm', km: 'km' },
   sources: [
     'Rupa bumi: Copernicus GLO-30 DEM, © DLR e.V. 2010-2014 dan © Airbus Defence and Space GmbH 2014-2018, disediakan di bawah COPERNICUS oleh Kesatuan Eropah dan ESA. Ketinggian dibesarkan 1.6×.',

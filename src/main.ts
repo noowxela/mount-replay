@@ -45,6 +45,7 @@ function applyText() {
   $('#sources').innerHTML = D.sources.map((s) => `<li>${s}</li>`).join('');
   $('#cp-list').innerHTML = CP.map((c) => `<li><button data-cp="${c.id}"><b><em class="code">${cpCode(CP.indexOf(c))}</em> ${D.cp[c.id as keyof typeof D.cp]}</b><span>${c.ele.toLocaleString('en')} ${D.units.m} · ${(c.along / 1000).toFixed(1)} ${D.units.km}</span><i>${cpKind(c.id)} · ${D.eleSrc[c.eleSrc]}</i></button></li>`).join('');
   drawInset($('#inset') as unknown as SVGSVGElement, L.inset, [CP[CP.length - 1].lat, CP[CP.length - 1].lon], { borneo: D.borneo, sabah: D.sabah, kk: D.kk, peak: D.cp.lowspeak });
+  { const pk = CP[CP.length - 1]; $('#loc-coords').textContent = `${pk.lat.toFixed(3)}° N / ${pk.lon.toFixed(3)}° E`; }
   buildLabels(); renderMedia(); renderProgress(); if (storeWarn) setStoreNote(storeWarn as 'storeQuota'); setPlaying(playing); refreshChartMarkers(); update();
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang]')) b.onclick = () => { setLang(b.dataset.lang as Lang); applyText(); };
@@ -84,12 +85,35 @@ const chart = createChart($('#chart') as unknown as SVGSVGElement, L, I, (active
 function refreshChartMarkers() {
   const list: ChartCp[] = CP.map((c, i) => ({ id: c.id, short: cpCode(i), full: cpName(c.id), t: timeAtAlong(I, c.along) }));
   const ms: ChartMedia[] = media.filter((m) => m.t != null).map((m) => ({ id: m.id, t: m.t!, kind: m.kind }));
-  chart.set(list, ms, (h) => { if (h.kind === 'cp') flyToAlong(CP.find((c) => c.id === h.id)!.along); else { const it = media.find((x) => x.id === h.ids[0]); clock = h.t; update(); if (it) openViewer(it); } });
+  chart.set(list, ms, (h) => { if (h.kind === 'cp') flyToAlong(CP.find((c) => c.id === h.id)!.along); else if (h.ids.length > 1) openPicker(h.ids, h.t, h.x ?? 0, h.y ?? 0); else { const it = media.find((x) => x.id === h.ids[0]); clock = h.t; update(); if (it) openViewer(it); } });
 }
 /** Stops for Back / The next: checkpoint arrivals (both ways) and placed media. */
 function stops() { const s = CP.flatMap((c) => [timeAtAlong(I, c.along), timeAtAlong(I, c.along, true)]); for (const m of media) if (m.t != null) s.push(m.t); return [...new Set(s.map(Math.round))].sort((a, b) => a - b); }
-$('#btn-next').onclick = () => { const n = stops().find((s) => s > clock + 30); if (n != null) { clock = n; update(); } };
-$('#btn-back').onclick = () => { const n = stops().reverse().find((s) => s < clock - 30); clock = n ?? I.start; update(); };
+const stepNext = () => { const n = stops().find((s) => s > clock + 30); if (n != null) { clock = n; update(); } };
+const stepBack = () => { const n = stops().reverse().find((s) => s < clock - 30); clock = n ?? I.start; update(); };
+$('#btn-next').onclick = stepNext; $('#btn-back').onclick = stepBack;
+/** Back / The next: disabled at the ends; the status line says which stop is current. */
+function renderSteps() {
+  const s = stops(); const D = t(); let k = 0; s.forEach((v, i) => { if (v <= clock + 30) k = i + 1; });
+  $<HTMLButtonElement>('#btn-back').disabled = clock <= I.start + 1; $<HTMLButtonElement>('#btn-next').disabled = !s.some((v) => v > clock + 30);
+  const txt = D.stepStatus.replace('{n}', String(Math.max(1, k))).replace('{total}', String(s.length)); const el = $('#step-status'); if (el.textContent !== txt) el.textContent = txt;
+}
+// ---------- cluster picker (several photos at one spot on the chart) ----------
+const picker = $('#chart-picker'); let pickerFrom: Element | null = null;
+function openPicker(ids: string[], tt: number, x: number, y: number) {
+  const D = t(); const items = ids.map((id) => media.find((m) => m.id === id)).filter(Boolean) as MediaItem[];
+  pickerFrom = document.activeElement; const marker = [...document.querySelectorAll('#chart .cluster')].find((g) => Math.abs(+(g.getAttribute('transform') ?? '').replace(/translate\(([-\d.]+).*/, '$1') - x) < 0.5); marker?.setAttribute('aria-expanded', 'true');
+  picker.setAttribute('aria-label', D.pickerTitle.replace('{n}', String(items.length)).replace('{time}', fmtClock(tt)));
+  picker.innerHTML = `<div class="pk-head"><span>${D.pickerTitle.replace('{n}', String(items.length)).replace('{time}', fmtClock(tt))}</span><button type="button" class="pk-close" aria-label="${D.close}">×</button></div>` + items.map((m) => `<button type="button" class="pk-item" data-pm="${m.id}"><span class="th">${m.thumb ? `<img src="${m.thumb}" alt="">` : `<span class="ph">${m.heic ? 'HEIC' : m.kind === 'video' ? '▶' : '◻'}</span>`}</span><span>${m.t != null ? fmtClock(m.t) : ''}<small>${m.name}</small></span></button>`).join('');
+  const wrap = picker.parentElement!; const w = wrap.clientWidth; const pw = Math.min(280, w);
+  picker.style.left = `${Math.max(0, Math.min(w - pw, x - pw / 2))}px`; picker.style.width = `${pw}px`; picker.style.bottom = `${Math.max(0, wrap.clientHeight - y + 14)}px`;
+  picker.classList.remove('hidden'); clock = tt; update();
+  picker.querySelector<HTMLButtonElement>('.pk-close')!.onclick = () => closePicker();
+  for (const b of picker.querySelectorAll<HTMLButtonElement>('.pk-item')) b.onclick = () => { const m = media.find((q) => q.id === b.dataset.pm)!; closePicker(false); if (m.t != null) { clock = m.t; update(); } openViewer(m); };
+  picker.querySelector<HTMLButtonElement>('.pk-item')?.focus();
+}
+function closePicker(restore = true) { if (picker.classList.contains('hidden')) return false; picker.classList.add('hidden'); picker.innerHTML = ''; for (const g of document.querySelectorAll('#chart .cluster')) g.setAttribute('aria-expanded', 'false'); if (restore) (pickerFrom as HTMLElement | null)?.focus?.(); return true; }
+document.addEventListener('pointerdown', (e) => { if (!picker.classList.contains('hidden') && !picker.contains(e.target as Node) && !(e.target as Element).closest?.('#chart .cluster')) closePicker(false); });
 $('#btn-trace').onclick = () => view.setView(view.view === 'follow' ? 'auto' : 'follow');
 /** Active checkpoint: last one passed in the walking direction. */
 function activeCp(along: number) { if (clock <= summitT) { let k = 0; CP.forEach((c, i) => { if (c.along <= along + 1) k = i; }); return k; } let k = CP.length - 1; CP.forEach((c, i) => { if (c.along >= along - 1 && i < k) k = i; }); return k; }
@@ -98,7 +122,8 @@ document.addEventListener('click', (e) => { const b = (e.target as HTMLElement).
 
 // ---------- transport ----------
 const scrub = $<HTMLInputElement>('#scrub');
-function setPlaying(v: boolean) { playing = v; const D = t(); $('#play-ico').textContent = v ? 'Ⅱ' : '▶'; $('#play-txt').textContent = v ? D.pause : clock >= I.end ? D.again : D.play; }
+function setPlaying(v: boolean) { playing = v; const D = t(); $('#play-ico').textContent = v ? 'Ⅱ' : '▶'; $('#play-txt').textContent = v ? D.pause : clock >= I.end ? D.again : D.play;
+  const st = $('#replay-status'); st.classList.toggle('paused', !v); st.querySelector('span')!.textContent = v ? D.autoReplay : D.pausedStatus; }
 $('#play').onclick = () => { if (!playing && clock >= I.end) clock = I.start; setPlaying(!playing); };
 scrub.oninput = () => { clock = fromActive(I, (+scrub.value / 1000) * activeDuration(I)); nightUntil = 0; update(); };
 $<HTMLSelectElement>('#speed').onchange = (e) => { speed = +(e.target as HTMLSelectElement).value; };
@@ -108,7 +133,20 @@ view.onViewChange = (v) => { $('#btn-trace').setAttribute('aria-pressed', String
 view.onViewChange(view.view);
 const setTone = (mono: boolean) => { view.setMono(mono); $('#btn-mono').setAttribute('aria-pressed', String(mono)); $('#btn-colour').setAttribute('aria-pressed', String(!mono)); };
 $('#btn-colour').onclick = () => setTone(false); $('#btn-mono').onclick = () => setTone(true); setTone(params.get('tone') === 'mono');
-document.addEventListener('keydown', (e) => { if ((e.target as HTMLElement).closest('input,select,textarea')) return; if (e.key === ' ') { e.preventDefault(); $('#play').click(); } if (e.key === 'Escape') closeViewer(); });
+/** Keyboard: Space play/pause · ←/→ seek 1 % (Shift 10 %) · Home/End · , and . for Back / The next · Esc closes the picker, then the viewer. */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { if (closePicker()) return; if (!$('#viewer').classList.contains('hidden')) { closeViewer(); return; } }
+  const tgt = e.target as HTMLElement; if (tgt.closest('input,select,textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const viewerOpen = !$('#viewer').classList.contains('hidden');
+  if (viewerOpen) { if (e.key === 'ArrowLeft') { e.preventDefault(); viewerStep(-1); } else if (e.key === 'ArrowRight') { e.preventDefault(); viewerStep(1); } return; }
+  if (e.key === ' ' && !tgt.closest('button,[role="button"]')) { e.preventDefault(); $('#play').click(); return; }
+  const span = activeDuration(I); const seekBy = (f: number) => { clock = fromActive(I, Math.max(0, Math.min(span, toActive(I, clock) + f * span))); nightUntil = 0; showNight(false); update(); };
+  if (e.key === 'ArrowRight') { e.preventDefault(); seekBy(e.shiftKey ? 0.1 : 0.01); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); seekBy(e.shiftKey ? -0.1 : -0.01); }
+  else if (e.key === 'Home') { e.preventDefault(); clock = I.start; update(); }
+  else if (e.key === 'End') { e.preventDefault(); clock = I.end; update(); }
+  else if (e.key === '.') stepNext(); else if (e.key === ',') stepBack();
+});
 
 // night card: entering the overnight gap shows the card, then the clock jumps to the 02:30 start
 const night = $('#night');
@@ -131,7 +169,7 @@ function update() {
   $('#chapter').textContent = `${cpCode(ci)} · ${cpName(cid)}`; $('#chapter').title = `${cpName(cid)} · ${cpKind(cid)}`;
   $('#ch-prog').textContent = `${Math.round((toActive(I, clock) / activeDuration(I)) * 100)}% · ${Math.round(p[2]).toLocaleString('en')} ${D.units.m}`;
   for (const l of labels) if (l.el.dataset.cpid) l.el.classList.toggle('active', l.el.dataset.cpid === cid);
-  const ll = { lat: CP[0].lat, lon: CP[0].lon }; void ll;
+  renderSteps();
 }
 
 // ---------- media ----------
@@ -228,14 +266,35 @@ function renderMedia() {
     li.onclick = () => { if (m.t != null) { clock = m.t; update(); } openViewer(m); };
   }
 }
+let viewing: MediaItem | null = null; let viewerFrom: Element | null = null;
+const placedMedia = () => media.filter((m) => m.t != null);
+function viewerStep(d: number) { if (!viewing) return; const list = placedMedia(); const i = list.indexOf(viewing); const n = list[i + d]; if (!n) return; clock = n.t!; update(); openViewer(n); }
+$('#viewer-prev').onclick = () => viewerStep(-1); $('#viewer-next').onclick = () => viewerStep(1);
 function openViewer(m: MediaItem) {
-  const body = $('#viewer-body'); const D = t();
+  const body = $('#viewer-body'); const D = t(); if ($('#viewer').classList.contains('hidden')) viewerFrom = document.activeElement; viewing = m;
+  const list = placedMedia(); const i = list.indexOf(m);
+  $<HTMLButtonElement>('#viewer-prev').disabled = i <= 0; $<HTMLButtonElement>('#viewer-next').disabled = i < 0 || i >= list.length - 1;
+  $('#viewer-idx').textContent = i >= 0 ? `${i + 1} / ${list.length}` : '';
+  const how = { gps: D.placedGps, time: D.placedTime, none: D.unplaced, late: D.unplacedTime, offtrail: D.offTrail };
+  $('#viewer-meta').textContent = `${m.t != null ? `${D.day} ${m.t >= 86400 ? 2 : 1} · ${fmtClock(m.t)} · ` : ''}${how[m.how]}`;
   body.innerHTML = m.kind === 'video' ? `<video src="${m.url}" controls playsinline></video>` : m.heic && !m.thumb ? `<div class="ph big">HEIC<br><small>${D.heicNote}</small></div>` : `<img src="${m.url}" alt="">`;
   $('#viewer-cap').textContent = `${m.name}${m.lat != null ? ` · ${m.lat.toFixed(5)}, ${m.lon!.toFixed(5)}` : ''}`;
-  $('#viewer').classList.remove('hidden');
+  $('#viewer').classList.remove('hidden'); $<HTMLButtonElement>('#viewer-close').focus();
 }
-function closeViewer() { $('#viewer').classList.add('hidden'); $('#viewer-body').innerHTML = ''; }
+function closeViewer() { if ($('#viewer').classList.contains('hidden')) return; $('#viewer').classList.add('hidden'); $('#viewer-body').innerHTML = ''; viewing = null; (viewerFrom as HTMLElement | null)?.focus?.(); }
 $('#viewer-close').onclick = closeViewer; $('#viewer').onclick = (e) => { if (e.target === $('#viewer')) closeViewer(); };
+
+// ---------- map overlays: altitude ruler + scan cursor, scan readout, camera readout ----------
+const RULER = { top: 4200, bottom: 1400 };
+{ const r = $('#alt-ruler'); r.innerHTML = Array.from({ length: (RULER.top - RULER.bottom) / 400 + 1 }, (_, i) => RULER.top - i * 400).map((h) => `<span style="top:${(((RULER.top - h) / (RULER.top - RULER.bottom)) * 100).toFixed(2)}%">${h.toLocaleString('en')}</span>`).join('') + '<b id="alt-cursor">▶</b>'; }
+let lastCam = '', lastScan = '';
+function renderOverlays() {
+  const { az, el } = view.angles(); const cam = `AZ ${az}° / EL ${el}°`; if (cam !== lastCam) { $('#cam-readout').textContent = cam; lastCam = cam; }
+  const h = view.scanAlt; const cur = $('#alt-cursor');
+  if (h == null) { cur.style.display = 'none'; if (lastScan) { $('#scan-readout').textContent = ''; lastScan = ''; } return; }
+  cur.style.display = ''; cur.style.top = `${Math.max(0, Math.min(100, ((RULER.top - h) / (RULER.top - RULER.bottom)) * 100)).toFixed(2)}%`;
+  const sc = t().scanAlt.replace('{h}', (Math.round(h / 10) * 10).toLocaleString('en')); if (sc !== lastScan) { $('#scan-readout').textContent = sc; lastScan = sc; }
+}
 
 // ---------- loop ----------
 let last = performance.now();
@@ -252,7 +311,7 @@ function frame(now: number) {
     update();
   }
   view.render(now, dt, !reduced);
-  placeLabels();
+  placeLabels(); renderOverlays();
   requestAnimationFrame(frame);
 }
 setLang(getLang()); applyText(); update(); void restoreSaved();

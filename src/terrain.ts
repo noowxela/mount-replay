@@ -110,6 +110,10 @@ export class TerrainView {
     this.scene.add(new THREE.LineSegments(g, new THREE.ShaderMaterial({ uniforms: this.lineUniforms, vertexShader: lineVert, fragmentShader: lineFrag, transparent: true, depthWrite: false })));
   }
   setMono(on: boolean) { this.uniforms.uMono.value = on ? 1 : 0; }
+  /** Height (m, real, not exaggerated) of the light band, or null when the band is off. */
+  get scanAlt() { const v = this.uniforms.uScan.value; return v < 0 ? null : v; }
+  /** Camera azimuth / elevation in degrees, for the AZ / EL readout. */
+  angles() { const o = this.camera.position.clone().sub(this.controls.target); const az = Math.round((Math.atan2(o.x, o.z) * 180) / Math.PI); const el = Math.round((Math.asin(Math.min(1, o.y / o.length())) * 180) / Math.PI); return { az, el }; }
   private resize() {
     const w = this.el.clientWidth, h = this.el.clientHeight; if (!w || !h) return;
     this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();

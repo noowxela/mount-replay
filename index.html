@@ -34,9 +34,11 @@
       <div class="overlay tl">
         <div class="tagline" data-i="tagline"></div>
         <div class="views" role="group"><button data-view="auto"></button><button data-view="follow"></button><button data-view="oblique"></button><button data-view="top"></button><button data-view="reset"></button></div>
-        <div class="tone" role="group"><button id="btn-colour"></button><button id="btn-mono"></button></div>
+        <div class="tools"><span id="cam-readout" class="cam-readout mono" aria-hidden="true">AZ 0° / EL 0°</span><div class="tone" role="group"><button id="btn-colour"></button><button id="btn-mono"></button></div></div>
       </div>
-      <div class="overlay bl hint" data-i="hint"></div>
+      <div class="alt-ruler mono" id="alt-ruler" aria-hidden="true"></div>
+      <div class="overlay bl foot mono"><span class="hint" data-i="hint"></span><span class="legend"><span><i class="lg-route"></i><em data-i="legendRoute"></em></span><span><i class="lg-done"></i><em data-i="legendDone"></em></span><span><i class="lg-now"></i><em data-i="legendNow"></em></span></span></div>
+      <div class="overlay br status mono"><span id="scan-readout" class="scan-readout" aria-hidden="true"></span><span id="replay-status" class="replay-status" role="status"><i aria-hidden="true"></i><span></span></span></div>
       <div id="night" class="night hidden" role="status"><div class="night-t" data-i="night"></div><div class="night-x" data-i="nightText"></div><button id="night-skip" data-i="skip"></button></div>
       <div id="loading" class="loading" data-i="loading"></div>
       <button type="button" id="aside-tab" class="aside-tab" aria-expanded="false" aria-controls="side"><svg class="aside-chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M4.5 2.5 L8 6 L4.5 9.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="aside-word">info</span></button>
@@ -64,9 +66,9 @@
           <h2 class="ch-title"><span class="num">03</span> / <span data-i="elevation"></span> · <span id="chapter" class="chapter"></span></h2>
           <div class="ch-btns"><button id="btn-back">← <span data-i="back"></span></button><button id="btn-next"><span data-i="next"></span> →</button><button id="btn-trace" aria-pressed="false">⌖ <span data-i="trace"></span></button></div>
         </div>
-        <div class="ch-r"><div><span id="ch-prog">0%</span> · <span id="t-now">00:00</span></div><div class="ch-hint" data-i="stopsHint"></div></div>
+        <div class="ch-r"><div><span id="ch-prog">0%</span> · <span id="t-now">00:00</span></div><div class="ch-hint" data-i="stopsHint"></div><div id="step-status" class="step-status" role="status" aria-live="polite"></div></div>
       </div>
-      <svg id="chart" aria-label="Elevation profile"></svg>
+      <div class="chart-wrap"><svg id="chart" role="img" aria-label="Elevation profile"></svg><div id="chart-picker" class="chart-picker hidden" role="group"></div></div>
       <div class="transport">
         <button id="play" class="play"><span id="play-ico">▶</span> <span id="play-txt"></span></button>
         <input id="scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Timeline" />
@@ -75,7 +77,7 @@
       </div>
     </section>
   </main>
-  <div id="viewer" class="viewer hidden" role="dialog" aria-modal="true"><div class="vbox"><button id="viewer-close" data-i="close"></button><div id="viewer-body"></div><div id="viewer-cap" class="mono"></div></div></div>
+  <div id="viewer" class="viewer hidden" role="dialog" aria-modal="true" aria-labelledby="viewer-title"><div class="vbox"><div class="vhead"><h2 id="viewer-title"><span class="num">05</span> <span data-i="viewerTitle"></span> <span id="viewer-idx" class="vidx"></span></h2><div class="vnav"><button id="viewer-prev">← <span data-i="back"></span></button><button id="viewer-next"><span data-i="next"></span> →</button><button id="viewer-close"><span data-i="close"></span> ×</button></div></div><div id="viewer-body"></div><div id="viewer-meta" class="mono vmeta"></div><div id="viewer-cap" class="mono"></div></div></div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
