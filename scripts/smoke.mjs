@@ -38,6 +38,9 @@ writeFileSync(`${out}/_ontrail.jpg`, gpsJpeg('2024:05:11 13:05:00', 6.0589492, 1
 const extra = ['2024:05:11 08:20:00', '2024:05:11 10:15:00', '2024:05:11 10:16:00', '2024:05:11 10:17:30', '2024:05:11 11:30:00', '2024:05:11 12:40:00', '2024:05:12 04:10:00', '2024:05:12 05:40:00', '2024:05:12 05:44:00', '2024:05:12 07:30:00', '2024:05:12 12:00:00'];
 const extraFiles = extra.map((w, i) => { const f = `${out}/_p${i}.jpg`; writeFileSync(f, exifJpeg(w)); return f; });
 const heicFile = new URL('./fixtures/heic-iphone7.heic', import.meta.url).pathname; // iPhone 7 HEIC with GPS + time (exifr test fixture, MIT)
+/** Full-viewport app: the document itself must never scroll (both axes), whatever is open. */
+async function noScroll(p, state) { const r = await p.evaluate(() => ({ sh: document.documentElement.scrollHeight, sw: document.documentElement.scrollWidth, h: innerHeight, w: innerWidth }));
+  if (r.sh > r.h + 1 || r.sw > r.w + 1) bad.push(`document scrolls (${state}): ${r.sw}x${r.sh} in ${r.w}x${r.h}`); }
 const openTabs = (p) => p.evaluate(() => { for (const id of ['aside-tab', 'bottom-tab']) { const b = document.getElementById(id); if (b?.getAttribute('aria-expanded') === 'false') b.click(); } });
 async function open(name, q, vp) {
   const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: vp.width < 500 ? 3 : 1, isMobile: vp.width < 500, hasTouch: vp.width < 500 });
@@ -49,7 +52,7 @@ async function open(name, q, vp) {
   await p.goto(`${base}?${q}`, { waitUntil: 'networkidle', timeout: 120000 });
   await p.waitForFunction(() => window.__mr?.ready, null, { timeout: 60000 });
   // the aside (SDD 002) and the chart (SDD 003) start closed: open both so the panels and the chart can be checked
-  await openTabs(p); await sleep(2500); return p;
+  await sleep(800); await noScroll(p, `${name} panels closed`); await openTabs(p); await sleep(2500); await noScroll(p, `${name} panels open`); return p;
 }
 // desktop EN: replay runs, night card, views, media
 const d = await open('desktop-en', 'lang=en', { width: 1600, height: 900 });
@@ -86,10 +89,12 @@ if (!heic?.decoded || !heic.thumb) bad.push(`HEIC not decoded: ${JSON.stringify(
 if (!(heic?.lat > 38 && heic?.lat < 38.1) || heic?.wall?.date !== '2019-10-20') bad.push(`HEIC metadata not read: ${JSON.stringify(heic)}`);
 await d.evaluate(() => { const li = [...document.querySelectorAll('#media-list li')].find((l) => /heic/i.test(l.textContent)); li?.click(); }); await sleep(800);
 const heicShown = await d.evaluate(() => { const img = document.querySelector('#viewer-body img'); return !!img && img.naturalWidth > 0; });
-if (!heicShown) bad.push('HEIC not shown in the viewer'); else await d.screenshot({ path: `${out}/09-desktop-heic-viewer.png` });
-await d.click('#viewer-close');
+await noScroll(d, 'viewer open'); if (!heicShown) bad.push('HEIC not shown in the viewer'); else await d.screenshot({ path: `${out}/09-desktop-heic-viewer.png` });
+await d.click('#viewer-close'); await noScroll(d, 'viewer closed');
 await d.setInputFiles('#file', extraFiles); await sleep(1500);
 const overlaps = await d.evaluate(() => { const r = [...document.querySelectorAll('#chart .media circle')].map((c) => c.getBoundingClientRect()); let n = 0; for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) if (r[i].left < r[j].right - 1 && r[j].left < r[i].right - 1 && r[i].top < r[j].bottom - 1 && r[j].top < r[i].bottom - 1) n++; return { n, markers: r.length, clusters: document.querySelectorAll('#chart .cluster').length }; });
+await d.evaluate(() => document.querySelector('#chart .cluster')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))); await sleep(300);
+if (await d.evaluate(() => document.getElementById('chart-picker').classList.contains('hidden'))) bad.push('cluster picker did not open'); await noScroll(d, 'picker open'); await d.keyboard.press('Escape');
 if (overlaps.n) bad.push(`chart media markers overlap: ${JSON.stringify(overlaps)}`);
 const cpLabels = await d.evaluate(() => [...document.querySelectorAll('#chart .cp .cplabel')].map((t) => t.textContent));
 if (cpLabels[0] && !/START/.test(cpLabels[0]) || !cpLabels.some((l) => /^CP1/.test(l)) || !cpLabels.some((l) => /SUMMIT/.test(l))) bad.push(`checkpoint codes wrong: ${cpLabels}`);
@@ -135,6 +140,8 @@ const mticks = await m.evaluate(() => { const ys = [...document.querySelectorAll
 if (mticks.minGap < 12) bad.push(`mobile y labels overlap: ${JSON.stringify(mticks)}`);
 await m.setInputFiles('#file', [`${out}/_test.jpg`, ...extraFiles]); await sleep(1500); await m.locator('.bottom').screenshot({ path: `${out}/10-mobile-bottom-panel.png` });
 for (const lg of ['zh', 'ms']) { const p = await open(`bottom-${lg}`, `lang=${lg}&autoplay=0&t=30`, { width: 1440, height: 900 }); await p.locator('.bottom').screenshot({ path: `${out}/10-desktop-bottom-${lg}.png` }); }
+await m.evaluate(() => document.querySelector('#chart .cluster')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))); await sleep(300); await noScroll(m, 'mobile picker open'); await m.keyboard.press('Escape');
+for (const [w, h] of [[1280, 800], [1920, 1080]]) { const q = await open(`desktop-${w}`, 'lang=en&autoplay=0', { width: w, height: h }); await q.close(); }
 const overflow = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth); if (overflow > 1) bad.push(`mobile horizontal overflow ${overflow}px`);
 await browser.close();
 console.log(JSON.stringify({ c0, c1, nightShown, after, placed, loading, heic, heicHow, onTrail, ticks, mticks, batchSeen, batchMs, restored, afterClear, anchored, overlaps, cpLabels }));
