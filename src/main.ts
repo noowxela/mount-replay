@@ -106,7 +106,7 @@ function openPicker(ids: string[], tt: number, x: number, y: number) {
   picker.setAttribute('aria-label', D.pickerTitle.replace('{n}', String(items.length)).replace('{time}', fmtClock(tt)));
   picker.innerHTML = `<div class="pk-head"><span>${D.pickerTitle.replace('{n}', String(items.length)).replace('{time}', fmtClock(tt))}</span><button type="button" class="pk-close" aria-label="${D.close}">×</button></div>` + items.map((m) => `<button type="button" class="pk-item" data-pm="${m.id}"><span class="th">${m.thumb ? `<img src="${m.thumb}" alt="">` : `<span class="ph">${m.heic ? 'HEIC' : m.kind === 'video' ? '▶' : '◻'}</span>`}</span><span>${m.t != null ? fmtClock(m.t) : ''}<small>${m.name}</small></span></button>`).join('');
   const wrap = picker.parentElement!; const w = wrap.clientWidth; const pw = Math.min(280, w);
-  picker.style.left = `${Math.max(0, Math.min(w - pw, x - pw / 2))}px`; picker.style.width = `${pw}px`; picker.style.bottom = `${Math.max(0, wrap.clientHeight - y + 14)}px`;
+  picker.style.left = `${Math.max(0, Math.min(w - pw, x - pw / 2))}px`; picker.style.width = `${pw}px`; picker.style.bottom = `${Math.max(0, wrap.clientHeight - y + 14)}px`; picker.style.maxHeight = `${Math.max(110, Math.min(230, wrap.offsetTop + y - 22))}px`; // stays inside the bottom panel (it clips on phones)
   picker.classList.remove('hidden'); clock = tt; update();
   picker.querySelector<HTMLButtonElement>('.pk-close')!.onclick = () => closePicker();
   for (const b of picker.querySelectorAll<HTMLButtonElement>('.pk-item')) b.onclick = () => { const m = media.find((q) => q.id === b.dataset.pm)!; closePicker(false); if (m.t != null) { clock = m.t; update(); } openViewer(m); };
