@@ -27,7 +27,7 @@
     <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 16" width="18" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 14.5 L6.2 8.2 L9.2 11 L14.2 2.2 L16.4 6.2 L19 4.4 L23 14.5"/></svg></span><b data-i="title"></b><span class="sub" data-i="subtitle"></span></div>
     <div class="langs" role="group" aria-label="Language"><button data-lang="en">EN</button><button data-lang="zh">中文</button><button data-lang="ms">BM</button></div>
   </header>
-  <main class="layout">
+  <main class="layout aside-closed">
     <section class="stage" aria-label="3D terrain">
       <div id="gl"></div>
       <div id="labels" aria-hidden="true"></div>
@@ -39,8 +39,9 @@
       <div class="overlay bl hint" data-i="hint"></div>
       <div id="night" class="night hidden" role="status"><div class="night-t" data-i="night"></div><div class="night-x" data-i="nightText"></div><button id="night-skip" data-i="skip"></button></div>
       <div id="loading" class="loading" data-i="loading"></div>
+      <button type="button" id="aside-tab" class="aside-tab" aria-expanded="false" aria-controls="side"><svg class="aside-chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M4.5 2.5 L8 6 L4.5 9.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="aside-word">info</span></button>
     </section>
-    <aside class="side">
+    <aside class="side" id="side">
       <section class="panel live"><h2><span class="num">01</span> <span data-i="live"></span> <span class="badge" data-i="typical"></span></h2>
         <div class="kv"><div><span data-i="clock"></span><b id="v-clock">–</b><i id="v-day"></i></div><div><span data-i="elevation"></span><b id="v-ele">–</b></div><div><span data-i="distance"></span><b id="v-dist">–</b></div><div><span data-i="elapsed"></span><b id="v-elapsed">–</b></div></div>
         <p class="note" data-i="typicalNote"></p></section>
@@ -56,7 +57,8 @@
       <section class="panel loc"><h2><span class="num">04</span> <span data-i="location"></span></h2><svg id="inset" role="img"></svg><div id="loc-coords" class="mono"></div></section>
       <section class="panel credits"><h2><span class="num">06</span> <span data-i="credits"></span></h2><ul id="sources"></ul></section>
     </aside>
-    <section class="bottom mono">
+    <section class="bottom mono chart-closed">
+      <button type="button" id="bottom-tab" class="bottom-tab" aria-expanded="false" aria-controls="chart" aria-label="Elevation profile"><svg class="bottom-chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <div class="ch-head">
         <div class="ch-l">
           <h2 class="ch-title"><span class="num">03</span> / <span data-i="elevation"></span> · <span id="chapter" class="chapter"></span></h2>

@@ -50,18 +50,16 @@ export function createChart(svg: SVGSVGElement, L: Loaded, I: Itinerary, onScrub
     const d = pts.join(''); const area = `${d}L${x(dur)},${H - pad.b}L${x(0)},${H - pad.b}Z`;
     el('path', { d: area, class: 'area' }); el('path', { d: area, class: 'area on', 'clip-path': 'url(#chpassed)' });
     el('path', { d, class: 'profile' }); el('path', { d, class: 'profile on', 'clip-path': 'url(#chpassed)' });
-    // checkpoints: short code above a thin vertical line; full name in the tooltip and when active
-    // row 0 is reserved for the active checkpoint's full name; codes go in rows 1-3, skipped (line only) if no row fits
+    // checkpoints: short code above a thin vertical line; full name stays in the tooltip
+    // codes go in rows 0-2, skipped (line only) if no row fits
     const rows: number[] = []; const cw = 6.2;
     for (const c of cps) {
       const tx = x(toActive(I, c.t)); const g = el('g', { class: 'mk cp', transform: `translate(${tx.toFixed(1)},0)` });
       el('title', {}, g).textContent = c.full;
-      const half = (c.short.length * cw) / 2 + 4; let row = 1; while (row <= 3 && rows[row] != null && tx - half < rows[row]) row++;
-      const shown = row <= 3; if (shown) rows[row] = tx + half; const ly = shown ? 11 + row * 11 : 11 + 3 * 11;
+      const half = (c.short.length * cw) / 2 + 4; let row = 0; while (row <= 2 && rows[row] != null && tx - half < rows[row]) row++;
+      const shown = row <= 2; if (shown) rows[row] = tx + half; const ly = shown ? 11 + row * 11 : 11 + 2 * 11;
       el('line', { y1: ly + 4, y2: y(ele(toActive(I, c.t))), class: 'cpline' }, g);
       const tl = el('text', { y: ly, class: `cplabel${shown ? '' : ' hid'}`, 'text-anchor': 'middle' }, g); tl.textContent = c.short;
-      const full = el('text', { y: 11, class: 'cpfull', 'text-anchor': tx < W * 0.2 ? 'start' : tx > W * 0.8 ? 'end' : 'middle', x: tx < W * 0.2 ? -4 : tx > W * 0.8 ? 4 : 0 }, g);
-      full.textContent = `${c.short} · ${c.full}`;
       el('rect', { x: -half, y: ly - 10, width: 2 * half, height: 14, class: 'hit' }, g);
       g.addEventListener('pointerdown', (e) => e.stopPropagation());
       g.addEventListener('click', () => onHit({ kind: 'cp', id: c.id, t: c.t })); cpGroups.set(c.id, g);

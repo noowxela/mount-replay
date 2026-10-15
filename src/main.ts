@@ -48,6 +48,10 @@ function applyText() {
   buildLabels(); renderMedia(); renderProgress(); if (storeWarn) setStoreNote(storeWarn as 'storeQuota'); setPlaying(playing); refreshChartMarkers(); update();
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang]')) b.onclick = () => { setLang(b.dataset.lang as Lang); applyText(); };
+const asideTab = $<HTMLButtonElement>('#aside-tab');
+asideTab.onclick = () => { const closed = document.querySelector('.layout')!.classList.toggle('aside-closed'); asideTab.setAttribute('aria-expanded', String(!closed)); };
+const bottomTab = $<HTMLButtonElement>('#bottom-tab');
+bottomTab.onclick = () => { const closed = document.querySelector('.bottom')!.classList.toggle('chart-closed'); bottomTab.setAttribute('aria-expanded', String(!closed)); };
 
 // ---------- labels over the 3D view (checkpoints, Park HQ, peaks, media thumbnails) ----------
 interface Label { el: HTMLElement; x: number; z: number; lift: number }
