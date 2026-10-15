@@ -6,23 +6,30 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { heightAt, type Loaded } from './data';
 
+/** Vertical exaggeration. DESIGN.md reports 2.4× for the reference demo but does not prescribe it; Kinabalu's ~2.4 km of
+ *  relief already reads well at 1.6×, so this stays (also stated in the credits). */
 export const EXAGGERATION = 1.6;
+const CONTOUR_M = 25, INDEX_M = 100;
+/** Motion timings (DESIGN.md §8): camera fly 1.3 s smoothstep, follow smoothing rate 6/s, light band period 20 s. */
+const FLY_MS = 1300, FOLLOW_RATE = 6, SCAN_PERIOD_MS = 20000;
 export type View = 'auto' | 'follow' | 'oblique' | 'top' | 'manual';
 const Y = (h: number) => h * EXAGGERATION;
 
 const dotVert = /* glsl */ `
-attribute float aH; attribute float aShade;
-uniform float uScan; uniform float uSize; uniform float uPx;
-varying float vH; varying float vShade; varying float vScan;
+attribute float aH; attribute float aShade; attribute float aRand;
+uniform float uScan; uniform float uSize; uniform float uPx; uniform float uTime;
+varying float vH; varying float vShade; varying float vScan; varying float vTwinkle;
 void main() {
   vH = aH; vShade = aShade; vScan = 1.0 - smoothstep(0.0, 140.0, abs(aH - uScan));
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mv;
-  gl_PointSize = clamp(uSize * uPx / -mv.z, 1.0, 4.0 * uPx);
+  // slow per-dot shimmer (uTime is frozen under reduced motion)
+  vTwinkle = 0.86 + 0.14 * sin(uTime * (0.6 + aRand * 1.4) + aRand * 40.0);
+  gl_PointSize = clamp(uSize * uPx / -mv.z * (1.0 + vScan * 0.6) * (0.92 + 0.16 * aRand), 1.0, 4.0 * uPx);
 }`;
 const dotFrag = /* glsl */ `
 uniform float uMono; uniform vec3 uBg;
-varying float vH; varying float vShade; varying float vScan;
+varying float vH; varying float vShade; varying float vScan; varying float vTwinkle;
 vec3 ramp(float h) {
   vec3 a = vec3(0.16, 0.42, 0.30), b = vec3(0.45, 0.62, 0.36), c = vec3(0.70, 0.62, 0.45), d = vec3(0.70, 0.70, 0.72), e = vec3(0.97, 0.97, 1.0);
   return h < 1500.0 ? mix(a, b, h / 1500.0) : h < 2800.0 ? mix(b, c, (h - 1500.0) / 1300.0) : h < 3500.0 ? mix(c, d, (h - 2800.0) / 700.0) : mix(d, e, clamp((h - 3500.0) / 550.0, 0.0, 1.0));
@@ -31,18 +38,18 @@ void main() {
   vec2 q = gl_PointCoord - 0.5; if (dot(q, q) > 0.25) discard;
   vec3 base = uMono > 0.5 ? vec3(0.86) : ramp(vH);
   vec3 col = base * (0.25 + 0.95 * vShade) + vec3(1.0, 0.72, 0.42) * vScan * 0.9;
-  gl_FragColor = vec4(col, 0.55 + 0.45 * vShade + 0.3 * vScan);
+  gl_FragColor = vec4(col, (0.55 + 0.45 * vShade + 0.3 * vScan) * vTwinkle);
 }`;
 const lineVert = /* glsl */ `
 attribute float aH; attribute float aIndex; uniform float uScan; varying float vScan; varying float vIndex;
 void main() { vScan = 1.0 - smoothstep(0.0, 120.0, abs(aH - uScan)); vIndex = aIndex; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const lineFrag = /* glsl */ `
 uniform float uMono; varying float vScan; varying float vIndex;
-void main() { vec3 c = uMono > 0.5 ? vec3(0.9) : vec3(0.85, 0.80, 0.66); gl_FragColor = vec4(mix(c, vec3(1.0, 0.7, 0.4), vScan), (vIndex > 0.5 ? 0.55 : 0.16) + vScan * 0.5); }`;
+void main() { vec3 c = uMono > 0.5 ? vec3(0.9) : vec3(0.85, 0.80, 0.66); gl_FragColor = vec4(mix(c, vec3(1.0, 0.7, 0.4), vScan), (vIndex > 0.5 ? 0.42 : 0.07) + vScan * 0.5); }`;
 
 export class TerrainView {
   renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; controls: OrbitControls;
-  private uniforms = { uScan: { value: -1000 }, uSize: { value: 26 }, uPx: { value: 1 }, uMono: { value: 0 }, uBg: { value: new THREE.Color('#0b0d0e') } };
+  private uniforms = { uScan: { value: -1000 }, uSize: { value: 26 }, uPx: { value: 1 }, uTime: { value: 0 }, uMono: { value: 0 }, uBg: { value: new THREE.Color('#0b0d0e') } };
   private lineUniforms = { uScan: this.uniforms.uScan, uMono: this.uniforms.uMono };
   private passed: Line2; private passedGeo = new LineGeometry(); private trailPts: THREE.Vector3[] = [];
   private walker = new THREE.Group(); private ring: THREE.Mesh;
@@ -58,7 +65,10 @@ export class TerrainView {
     this.controls.enableDamping = !reduced; this.controls.maxPolarAngle = 1.45; this.controls.minDistance = 600; this.controls.maxDistance = 60000;
     this.controls.addEventListener('start', () => { this.tween = null; if (this.view !== 'manual') { this.view = 'manual'; this.onViewChange('manual'); } });
     this.uniforms.uPx.value = this.renderer.getPixelRatio();
-    this.buildDots(mobile ? 2 : 1); this.buildContours(); 
+    this.buildDots(mobile ? 2 : 1); this.buildContours();
+    { let lo = Infinity; for (const h of L.heights) if (h > -100 && h < lo) lo = h; const gs = L.meta.halfSize * 2.4;
+      const grid = new THREE.GridHelper(gs, 36, 0x29393e, 0x1e2b2f); grid.position.y = Y(lo) - 120; (grid.material as THREE.Material).transparent = true; (grid.material as THREE.Material).opacity = 0.55; this.scene.add(grid); }
+
     // trail: full route (thin, beige) and walked part (thick, orange); 12 m above the ground so it reads over the dots
     for (const p of L.trail.trail.points) this.trailPts.push(new THREE.Vector3(p[0], Y(heightAt(L, p[0], p[1])) + 14, p[1]));
     const full = new LineGeometry(); full.setPositions(this.trailPts.flatMap((v) => [v.x, v.y, v.z]));
@@ -76,20 +86,20 @@ export class TerrainView {
   private mats: LineMaterial[] = [];
   private buildDots(step: number) {
     const { n, halfSize } = this.L.meta; const H = this.L.heights; const s = (2 * halfSize) / (n - 1);
-    const pos: number[] = [], hh: number[] = [], shade: number[] = [];
+    const pos: number[] = [], hh: number[] = [], shade: number[] = [], rnd: number[] = [];
     const lx = -0.55, lz = -0.45, ly = 0.7; // light from the north-west
     for (let j = 1; j < n - 1; j += step) for (let i = 1; i < n - 1; i += step) {
       const h = H[j * n + i]; const dx = (H[j * n + i + 1] - H[j * n + i - 1]) / (2 * s), dz = (H[(j + 1) * n + i] - H[(j - 1) * n + i]) / (2 * s);
       const nx = -dx * EXAGGERATION, nz = -dz * EXAGGERATION, len = Math.hypot(nx, 1, nz);
       shade.push(Math.max(0, (nx * lx + ly + nz * lz) / len / Math.hypot(lx, ly, lz)));
-      pos.push(-halfSize + i * s, Y(h), -halfSize + j * s); hh.push(h);
+      pos.push(-halfSize + i * s, Y(h), -halfSize + j * s); hh.push(h); rnd.push(((i * 73856093) ^ (j * 19349663)) % 1000 / 1000);
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('aH', new THREE.Float32BufferAttribute(hh, 1)); g.setAttribute('aShade', new THREE.Float32BufferAttribute(shade, 1));
+    g.setAttribute('aH', new THREE.Float32BufferAttribute(hh, 1)); g.setAttribute('aShade', new THREE.Float32BufferAttribute(shade, 1)); g.setAttribute('aRand', new THREE.Float32BufferAttribute(rnd.map(Math.abs), 1));
     const m = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: dotVert, fragmentShader: dotFrag, transparent: true, depthWrite: false });
     this.scene.add(new THREE.Points(g, m));
   }
-  /** 100 m contours by marching squares on the DEM grid; every 500 m drawn brighter (index contours). */
+  /** Contours every CONTOUR_M by marching squares on the DEM grid; every INDEX_M drawn brighter (DESIGN.md: 25 m / 100 m). */
   private buildContours() {
     const { n, halfSize } = this.L.meta; const H = this.L.heights; const s = (2 * halfSize) / (n - 1);
     const pos: number[] = [], hh: number[] = [], idx: number[] = [];
@@ -97,12 +107,12 @@ export class TerrainView {
     for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
       const a = H[j * n + i], b = H[j * n + i + 1], c = H[(j + 1) * n + i + 1], d = H[(j + 1) * n + i];
       const lo = Math.min(a, b, c, d), hi = Math.max(a, b, c, d);
-      for (let L = Math.ceil(lo / 100) * 100; L <= hi; L += 100) {
+      for (let L = Math.ceil(lo / CONTOUR_M) * CONTOUR_M; L <= hi; L += CONTOUR_M) {
         if (L === lo) continue;
         const e: number[][] = []; const [x0, z0] = P(i, j), [x1, z1] = P(i + 1, j + 1);
         const cut = (h1: number, h2: number, p1: number[], p2: number[]) => { if ((h1 < L) !== (h2 < L)) { const f = (L - h1) / (h2 - h1); e.push([p1[0] + (p2[0] - p1[0]) * f, p1[1] + (p2[1] - p1[1]) * f]); } };
         cut(a, b, [x0, z0], [x1, z0]); cut(b, c, [x1, z0], [x1, z1]); cut(c, d, [x1, z1], [x0, z1]); cut(d, a, [x0, z1], [x0, z0]);
-        for (let k = 0; k + 1 < e.length; k += 2) { pos.push(e[k][0], Y(L) + 3, e[k][1], e[k + 1][0], Y(L) + 3, e[k + 1][1]); hh.push(L, L); const ix = L % 500 === 0 ? 1 : 0; idx.push(ix, ix); }
+        for (let k = 0; k + 1 < e.length; k += 2) { pos.push(e[k][0], Y(L) + 3, e[k][1], e[k + 1][0], Y(L) + 3, e[k + 1][1]); hh.push(L, L); const ix = L % INDEX_M === 0 ? 1 : 0; idx.push(ix, ix); }
       }
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -145,21 +155,21 @@ export class TerrainView {
     this.view = v; this.onViewChange(v); const d = this.desired(v); if (!d) return;
     if (v === 'auto') { const off = this.camera.position.clone().sub(this.walkerPos); this.autoAz = Math.atan2(off.x, off.z); }
     if (instant) { this.camera.position.copy(d.pos); this.controls.target.copy(d.target); this.tween = null; }
-    else this.tween = { p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1: d.pos, t1: d.target, s: performance.now(), d: 1600 };
+    else this.tween = { p0: this.camera.position.clone(), t0: this.controls.target.clone(), p1: d.pos, t1: d.target, s: performance.now(), d: FLY_MS };
     this.controls.update();
   }
   render(now: number, dt: number, animate: boolean) {
-    // light sweep: a band climbing from 500 m to 4,100 m every 14 s (off under reduced motion)
-    this.uniforms.uScan.value = animate ? 500 + ((now / 14000) % 1) * 3600 : -1000;
+    // light sweep: a band climbing from 500 m to 4,100 m every 20 s, plus the dot shimmer (both off under reduced motion)
+    this.uniforms.uScan.value = animate ? 500 + ((now / SCAN_PERIOD_MS) % 1) * 3600 : -1000; if (animate) this.uniforms.uTime.value = now / 1000;
     this.ring.scale.setScalar(animate ? 1 + 0.6 * ((now / 1400) % 1) : 1); (this.ring.material as THREE.MeshBasicMaterial).opacity = animate ? 1 - ((now / 1400) % 1) : 0.8;
     if (this.view === 'auto' && animate) this.autoAz += dt * 0.06;
     if (this.tween) {
-      const k = Math.min(1, (now - this.tween.s) / this.tween.d), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+      const k = Math.min(1, (now - this.tween.s) / this.tween.d), e = k * k * (3 - 2 * k);
       const d = this.desired(this.view); if (d && (this.view === 'follow' || this.view === 'auto')) { this.tween.p1 = d.pos; this.tween.t1 = d.target; }
       this.camera.position.lerpVectors(this.tween.p0, this.tween.p1, e); this.controls.target.lerpVectors(this.tween.t0, this.tween.t1, e);
       if (k >= 1) this.tween = null;
     } else if (this.view === 'follow' || this.view === 'auto') {
-      const d = this.desired(this.view)!; const a = this.reduced ? 1 : 1 - Math.exp(-dt * 2.5);
+      const d = this.desired(this.view)!; const a = this.reduced ? 1 : 1 - Math.exp(-dt * FOLLOW_RATE);
       this.camera.position.lerp(d.pos, a); this.controls.target.lerp(d.target, a);
     }
     this.controls.update(); this.renderer.render(this.scene, this.camera);
