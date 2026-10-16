@@ -25,7 +25,10 @@
 <body>
   <header class="top">
     <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 16" width="18" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 14.5 L6.2 8.2 L9.2 11 L14.2 2.2 L16.4 6.2 L19 4.4 L23 14.5"/></svg></span><b data-i="title"></b><span class="sub" data-i="subtitle"></span></div>
-    <div class="langs" role="group" aria-label="Language"><button data-lang="en">EN</button><button data-lang="zh">中文</button><button data-lang="ms">BM</button></div>
+    <div class="head-r">
+      <div class="panels" role="group" aria-label="Panels"><button type="button" data-panel="live" aria-pressed="true" aria-controls="panel-live"><span class="pn">01</span> <span data-i="panelRecord">Record</span></button><button type="button" data-panel="cps" aria-pressed="true" aria-controls="panel-cps"><span class="pn">02</span> <span data-i="panelCps">Checkpoints</span></button><button type="button" data-panel="media" aria-pressed="true" aria-controls="panel-media"><span class="pn">05</span> <span data-i="panelPhotos">Photos</span></button><button type="button" data-panel="loc" aria-pressed="true" aria-controls="panel-loc"><span class="pn">04</span> <span data-i="panelLoc">Location</span></button><button type="button" data-panel="credits" aria-pressed="true" aria-controls="panel-credits"><span class="pn">06</span> <span data-i="panelCredits">Credits</span></button></div>
+      <div class="langs" role="group" aria-label="Language"><button data-lang="en">EN</button><button data-lang="zh">中文</button><button data-lang="ms">BM</button></div>
+    </div>
   </header>
   <main class="layout aside-closed">
     <section class="stage" aria-label="3D terrain">
@@ -44,11 +47,11 @@
       <button type="button" id="aside-tab" class="aside-tab" aria-expanded="false" aria-controls="side"><svg class="aside-chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M4.5 2.5 L8 6 L4.5 9.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="aside-word">info</span></button>
     </section>
     <aside class="side" id="side">
-      <section class="panel live"><h2><span class="num">01</span> <span data-i="live"></span> <span class="badge" data-i="typical"></span></h2>
+      <section class="panel live" id="panel-live"><h2><span class="num">01</span> <span data-i="live"></span> <span class="badge" data-i="typical"></span></h2>
         <div class="kv"><div><span data-i="clock"></span><b id="v-clock">–</b><i id="v-day"></i></div><div><span data-i="elevation"></span><b id="v-ele">–</b></div><div><span data-i="distance"></span><b id="v-dist">–</b></div><div><span data-i="elapsed"></span><b id="v-elapsed">–</b></div></div>
         <p class="note" data-i="typicalNote"></p></section>
-      <section class="panel cps"><h2><span class="num">02</span> <span data-i="checkpoints"></span></h2><ol id="cp-list"></ol></section>
-      <section class="panel media"><h2><span class="num">05</span> <span data-i="media"></span></h2>
+      <section class="panel cps" id="panel-cps"><h2><span class="num">02</span> <span data-i="checkpoints"></span></h2><ol id="cp-list"></ol></section>
+      <section class="panel media" id="panel-media"><h2><span class="num">05</span> <span data-i="media"></span></h2>
         <label class="file"><input id="file" type="file" accept="image/*,video/*,.heic,.heif,.mov" multiple /><span data-i="addMedia"></span></label> <button id="clear-media" class="clear-media" data-i="clearMedia"></button>
         <div id="media-progress" class="media-progress mono hidden" role="status" aria-live="polite"></div>
         <p class="note" data-i="mediaNote"></p>
@@ -56,11 +59,12 @@
         <p id="media-hint" class="note hint-gps hidden" role="note"></p>
         <div class="media-ctl"><label><span data-i="mediaDay1"></span> <input id="day1" type="date" /></label><label><span data-i="mediaOffset"></span> <input id="offset" type="number" step="0.5" value="0" min="-14" max="14" /></label></div>
         <ul id="media-list"></ul></section>
-      <section class="panel loc"><h2><span class="num">04</span> <span data-i="location"></span></h2><svg id="inset" role="img"></svg><div id="loc-coords" class="mono"></div></section>
-      <section class="panel credits"><h2><span class="num">06</span> <span data-i="credits"></span></h2><ul id="sources"></ul></section>
+      <section class="panel credits" id="panel-credits"><h2><span class="num">06</span> <span data-i="credits"></span></h2><ul id="sources"></ul></section>
     </aside>
     <section class="bottom mono chart-closed">
       <button type="button" id="bottom-tab" class="bottom-tab" aria-expanded="false" aria-controls="chart" aria-label="Elevation profile"><svg class="bottom-chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="bottom-body">
+      <div class="elev">
       <div class="ch-head">
         <div class="ch-l">
           <h2 class="ch-title"><span class="num">03</span> / <span data-i="elevation"></span> · <span id="chapter" class="chapter"></span></h2>
@@ -74,6 +78,9 @@
         <input id="scrub" type="range" min="0" max="1000" step="1" value="0" aria-label="Timeline" />
         <label class="speed"><span class="sr" data-i="speed"></span><select id="speed"><option value="30">30 ×</option><option value="60">60 ×</option><option value="120">120 ×</option><option value="240">240 ×</option><option value="600" selected>600 ×</option><option value="1200">1200 ×</option><option value="2400">2400 ×</option></select></label>
         <button id="loop" class="loop" aria-pressed="true">↻ <span data-i="loop"></span></button>
+      </div>
+      </div>
+      <section class="panel loc" id="panel-loc"><h2><span class="num">04</span> <span data-i="location"></span></h2><div class="loc-maps"><div class="loc-pane"><div class="loc-k" data-i="world">WORLD</div><svg id="globe" role="img"></svg></div><div class="loc-pane"><div class="loc-k" data-i="malaysia">MALAYSIA</div><svg id="inset" role="img"></svg></div></div><div class="loc-foot"><div id="loc-place" class="mono"></div><div id="loc-coords" class="mono"></div></div></section>
       </div>
     </section>
   </main>

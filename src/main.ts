@@ -2,7 +2,7 @@ import './styles.css';
 import { loadAll, buildItinerary, alongAt, timeAtAlong, toActive, fromActive, activeDuration, trailAt, nearestAlong, toLocal, type Loaded } from './data';
 import { TerrainView, type View } from './terrain';
 import { createChart, type ChartCp, type ChartMedia } from './chart';
-import { drawInset } from './inset';
+import { drawLocation } from './inset';
 import { importFiles, disposeMedia, type MediaItem, type Stage } from './media';
 import { saveItem, loadAllSaved, deleteSaved, clearSaved, restore } from './store';
 import { t, setLang, getLang, type Lang } from './i18n';
@@ -41,14 +41,17 @@ function applyText() {
   for (const el of document.querySelectorAll<HTMLElement>('[data-i]')) { const v = (D as unknown as Record<string, unknown>)[el.dataset.i!]; if (typeof v === 'string') el.textContent = v; }
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-view]')) b.textContent = D.views[b.dataset.view as keyof typeof D.views];
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang]')) b.setAttribute('aria-pressed', String(b.dataset.lang === getLang()));
+  const panelName: Record<string, string> = { live: D.live, cps: D.checkpoints, media: D.media, loc: D.location, credits: D.credits };
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-panel]')) b.setAttribute('aria-label', panelName[b.dataset.panel!] ?? '');
   $('#btn-colour').textContent = D.colour; $('#btn-mono').textContent = D.mono;
   $('#sources').innerHTML = D.sources.map((s) => `<li>${s}</li>`).join('');
   $('#cp-list').innerHTML = CP.map((c) => `<li><button data-cp="${c.id}"><b><em class="code">${cpCode(CP.indexOf(c))}</em> ${D.cp[c.id as keyof typeof D.cp]}</b><span>${c.ele.toLocaleString('en')} ${D.units.m} · ${(c.along / 1000).toFixed(1)} ${D.units.km}</span><i>${cpKind(c.id)} · ${D.eleSrc[c.eleSrc]}</i></button></li>`).join('');
-  drawInset($('#inset') as unknown as SVGSVGElement, L.inset, [CP[CP.length - 1].lat, CP[CP.length - 1].lon], { borneo: D.borneo, sabah: D.sabah, kk: D.kk, peak: D.cp.lowspeak });
-  { const pk = CP[CP.length - 1]; $('#loc-coords').textContent = `${pk.lat.toFixed(3)}° N / ${pk.lon.toFixed(3)}° E`; }
+  drawLocation($('#globe') as unknown as SVGSVGElement, $('#inset') as unknown as SVGSVGElement, L.world, L.malaysia, [CP[CP.length - 1].lat, CP[CP.length - 1].lon], D.mount);
+  { const pk = CP[CP.length - 1]; $('#loc-place').textContent = D.sabah; $('#loc-coords').textContent = `${pk.lat.toFixed(3)}° N / ${pk.lon.toFixed(3)}° E`; }
   buildLabels(); renderMedia(); renderProgress(); if (storeWarn) setStoreNote(storeWarn as 'storeQuota'); setPlaying(playing); refreshChartMarkers(); update();
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-lang]')) b.onclick = () => { setLang(b.dataset.lang as Lang); applyText(); };
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-panel]')) b.onclick = () => { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on)); $(`#panel-${b.dataset.panel}`).classList.toggle('hidden', !on); };
 const asideTab = $<HTMLButtonElement>('#aside-tab');
 asideTab.onclick = () => { const closed = document.querySelector('.layout')!.classList.toggle('aside-closed'); asideTab.setAttribute('aria-expanded', String(!closed)); };
 const bottomTab = $<HTMLButtonElement>('#bottom-tab');

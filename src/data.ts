@@ -7,16 +7,17 @@ export interface TrailData {
   trail: { points: [number, number, number, number][]; length: number; source: string };
   checkpoints: Checkpoint[]; places: { id: string; x: number; z: number; demEle: number }[]; peaks: Peak[]; kmMarkers: { label: string; along: number }[];
 }
-export interface Inset { source: string; bbox: [number, number, number, number]; rings: [number, number][][] }
+export interface Outline { source: string; bbox?: [number, number, number, number]; rings: [number, number][][] }
 
 export async function loadAll(base = './data/') {
-  const [meta, bin, trail, inset] = await Promise.all([
+  const [meta, bin, trail, world, malaysia] = await Promise.all([
     fetch(base + 'terrain.json').then((r) => r.json() as Promise<TerrainMeta>),
     fetch(base + 'terrain.bin').then((r) => r.arrayBuffer()),
     fetch(base + 'trail.json').then((r) => r.json() as Promise<TrailData>),
-    fetch(base + 'inset.json').then((r) => r.json() as Promise<Inset>),
+    fetch(base + 'world.json').then((r) => r.json() as Promise<Outline>),
+    fetch(base + 'malaysia.json').then((r) => r.json() as Promise<Outline>),
   ]);
-  return { meta, heights: new Int16Array(bin), trail, inset };
+  return { meta, heights: new Int16Array(bin), trail, world, malaysia };
 }
 export type Loaded = Awaited<ReturnType<typeof loadAll>>;
 
